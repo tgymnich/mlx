@@ -1,4 +1,5 @@
 // Copyright © 2023-2024 Apple Inc.
+
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -485,7 +486,7 @@ struct PyCompiledFun {
     };
 
     // Inputs must be array or tree of arrays
-    auto inputs = tree_flatten(args, true);
+    auto inputs = tree_flatten(args, false);
 
     // Get globally enclosed arrays so we don't compile through them
     // c.f. https://github.com/python/cpython/blob/main/Lib/inspect.py#L1638
