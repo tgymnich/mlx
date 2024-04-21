@@ -10,6 +10,7 @@ namespace mlx::core {
 
 namespace {
 
+using metal::CommandBuffer;
 using metal::CommandEncoder;
 
 template <typename T>
@@ -118,7 +119,7 @@ inline void debug_set_stream_queue_label(MTL::CommandQueue* queue, int index) {
 }
 
 inline void debug_set_primitive_buffer_label(
-    MTL::CommandBuffer* command_buffer,
+    CommandBuffer& command_buffer,
     Primitive& primitive) {
 #ifdef MLX_METAL_DEBUG
   std::ostringstream label;

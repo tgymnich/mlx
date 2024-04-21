@@ -36,6 +36,51 @@ inline std::string get_colocated_mtllib_path(const std::string& lib_name) {
 using MTLFCList =
     std::vector<std::tuple<const void*, MTL::DataType, NS::UInteger>>;
 
+struct CommandBuffer {
+  CommandBuffer(MTL::CommandBuffer* cbuf) : cbuf(cbuf){};
+  CommandBuffer(const CommandBuffer&) = delete;
+  CommandBuffer& operator=(const CommandBuffer&) = delete;
+
+  MTL::CommandBuffer* operator->() {
+    return cbuf;
+  }
+
+  void add_arrays(const std::vector<array>& arrays) {
+    for (auto& a : arrays) {
+      if (a.is_donatable()) {
+        add_donatable_array(a);
+      } else {
+        auto ds = a.data_shared_ptr();
+        auto id = reinterpret_cast<std::uintptr_t>(ds.get());
+        buffers.emplace(id, std::move(ds));
+      }
+    }
+  }
+
+  void add_donatable_arrays(const std::vector<array>& arrays) {
+    for (auto& a : arrays) {
+      add_donatable_array(a);
+    }
+  }
+
+  void add_donatable_array(const array& a) {
+    donated_buffers.push_back(a.data_shared_ptr());
+  }
+
+  void remove_arrays(const std::vector<array>& arrays) {
+    for (auto& a : arrays) {
+      buffers.erase(
+          reinterpret_cast<std::uintptr_t>(a.data_shared_ptr().get()));
+    }
+  }
+
+  // Multi-map
+  std::vector<std::shared_ptr<array::Data>> donated_buffers;
+  std::unordered_map<std::uintptr_t, std::shared_ptr<array::Data>> buffers;
+  MTL::CommandBuffer* cbuf;
+  int ops{0};
+};
+
 struct CommandEncoder {
   CommandEncoder(MTL::ComputeCommandEncoder* enc)
       : enc(enc), concurrent(false) {};
@@ -112,10 +157,7 @@ class Device {
   };
 
   void new_queue(int index);
-  MTL::CommandBuffer* new_command_buffer(int index);
-  MTL::CommandBuffer* get_command_buffer(int index);
-  int get_command_buffer_ops(int index);
-  void increment_command_buffer_ops(int index);
+  CommandBuffer& get_command_buffer(int index);
   void commit_command_buffer(int index);
   CommandEncoder& get_command_encoder(int index);
   void end_encoding(int index);
@@ -197,7 +239,7 @@ class Device {
 
   MTL::Device* device_;
   std::unordered_map<int32_t, MTL::CommandQueue*> queue_map_;
-  std::unordered_map<int32_t, std::pair<int, MTL::CommandBuffer*>> buffer_map_;
+  std::unordered_map<int32_t, std::unique_ptr<CommandBuffer>> buffer_map_;
   std::unordered_map<int32_t, std::unique_ptr<CommandEncoder>> encoder_map_;
   std::unordered_map<std::string, MTL::ComputePipelineState*> kernel_map_;
   std::unordered_map<std::string, MTL::Library*> library_map_;

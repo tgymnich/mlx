@@ -123,9 +123,7 @@ void Scan::eval_gpu(const std::vector<array>& inputs, array& out) {
   }
 
   if (copies.size() > 0) {
-    auto command_buffer = d.get_command_buffer(s.index);
-    command_buffer->addCompletedHandler(
-        [copies](MTL::CommandBuffer*) mutable { copies.clear(); });
+    d.get_command_buffer(s.index).add_donatable_arrays(copies);
   }
 }
 

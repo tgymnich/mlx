@@ -126,7 +126,7 @@ Device::~Device() {
     q.second->release();
   }
   for (auto& b : buffer_map_) {
-    b.second.second->release();
+    b.second->cbuf->release();
   }
   for (auto& e : encoder_map_) {
     (*e.second)->release();
@@ -155,45 +155,33 @@ void Device::new_queue(int index) {
   queue_map_.insert({index, q});
 }
 
-int Device::get_command_buffer_ops(int index) {
+CommandBuffer& Device::get_command_buffer(int index) {
   auto bit = buffer_map_.find(index);
-  return bit->second.first;
-}
+  if (bit == buffer_map_.end()) {
+    auto qit = queue_map_.find(index);
+    if (qit == queue_map_.end()) {
+      throw std::runtime_error(
+          "[metal::Device] Attempting to get command buffer for invalid queue.");
+    }
 
-void Device::increment_command_buffer_ops(int index) {
-  auto bit = buffer_map_.find(index);
-  bit->second.first++;
-}
+    auto cb = qit->second->commandBufferWithUnretainedReferences();
 
-MTL::CommandBuffer* Device::get_command_buffer(int index) {
-  auto bit = buffer_map_.find(index);
-  return (bit == buffer_map_.end()) ? nullptr : bit->second.second;
-}
+    if (!cb) {
+      throw std::runtime_error(
+          "[metal::Device] Unable to create new command buffer");
+    }
 
-MTL::CommandBuffer* Device::new_command_buffer(int index) {
-  auto qit = queue_map_.find(index);
-  if (qit == queue_map_.end()) {
-    throw std::runtime_error(
-        "[metal::Device] Attempting to get command buffer for invalid queue.");
+    // Increment ref count so the buffer is not garbage collected
+    cb->retain();
+    bit = buffer_map_.emplace(index, std::make_unique<CommandBuffer>(cb)).first;
   }
-
-  auto cb = qit->second->commandBufferWithUnretainedReferences();
-
-  if (!cb) {
-    throw std::runtime_error(
-        "[metal::Device] Unable to create new command buffer");
-  }
-
-  // Increment ref count so the buffer is not garbage collected
-  cb->retain();
-
-  return buffer_map_.insert({index, {0, cb}}).first->second.second;
+  return *(bit->second);
 }
 
 void Device::commit_command_buffer(int index) {
   auto bit = buffer_map_.find(index);
-  bit->second.second->commit();
-  bit->second.second->release();
+  bit->second->cbuf->commit();
+  bit->second->cbuf->release();
   buffer_map_.erase(bit);
 }
 
@@ -209,7 +197,7 @@ void Device::end_encoding(int index) {
 CommandEncoder& Device::get_command_encoder(int index) {
   auto eit = encoder_map_.find(index);
   if (eit == encoder_map_.end()) {
-    auto cb = get_command_buffer(index);
+    auto& cb = get_command_buffer(index);
     auto compute_encoder =
         cb->computeCommandEncoder(MTL::DispatchTypeConcurrent);
     // Increment ref count so the buffer is not garbage collected
