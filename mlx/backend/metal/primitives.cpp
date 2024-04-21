@@ -306,6 +306,7 @@ void unary_op(
     const std::vector<array>& inputs,
     array& out,
     const std::string op) {
+  auto& s = out.primitive().stream();
   auto& in = inputs[0];
   bool contig = in.flags().contiguous;
   if (contig) {
@@ -313,19 +314,18 @@ void unary_op(
       out.move_shared_buffer(in);
     } else {
       out.set_data(
-          allocator::malloc_or_wait(in.data_size() * out.itemsize()),
+          stream_malloc(in.data_size() * out.itemsize(), s),
           in.data_size(),
           in.strides(),
           in.flags());
     }
   } else {
-    out.set_data(allocator::malloc_or_wait(out.nbytes()));
+    out.set_data(stream_malloc(out.nbytes(), s));
   }
   if (in.size() == 0) {
     return;
   }
 
-  auto& s = out.primitive().stream();
   auto& d = metal::device(s.device);
   std::string tname = type_to_name(in);
   std::string opt_name = contig ? "v" : "g";
@@ -373,7 +373,7 @@ void arange_set_scalars(T start, T next, CommandEncoder& enc) {
 
 void Arange::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 0);
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
   if (out.size() == 0) {
     return;
   }
@@ -458,7 +458,7 @@ void ArcTanh::eval_gpu(const std::vector<array>& inputs, array& out) {
 void ArgReduce::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
   auto& in = inputs[0];
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
   auto& s = stream();
   auto& d = metal::device(s.device);
   std::string op_name;
@@ -565,7 +565,7 @@ void Concatenate::eval_gpu(const std::vector<array>& inputs, array& out) {
   }
   std::partial_sum(sizes.cbegin(), sizes.cend(), sizes.begin());
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
 
   auto strides = out.strides();
   auto flags = out.flags();
@@ -796,7 +796,7 @@ void RandomBits::eval_gpu(const std::vector<array>& inputs, array& out) {
 
   size_t elems_per_key = out.size() / num_keys;
   size_t bytes_per_key = out.itemsize() * elems_per_key;
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
   if (out.size() == 0) {
     return;
   }
@@ -894,7 +894,7 @@ void Sqrt::eval_gpu(const std::vector<array>& inputs, array& out) {
 void Slice::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
   if (out.size() == 0) {
-    out.set_data(nullptr);
+    out.set_data(allocator::Buffer{nullptr});
     return;
   }
 
@@ -905,7 +905,7 @@ void Slice::eval_gpu(const std::vector<array>& inputs, array& out) {
 
   // Do copy if needed
   if (copy_needed) {
-    out.set_data(allocator::malloc_or_wait(out.nbytes()));
+    out.set_data(stream_malloc(out.nbytes(), stream()));
     std::vector<int64_t> ostrides{out.strides().begin(), out.strides().end()};
     copy_gpu_inplace(
         /* const array& in = */ in,
@@ -926,7 +926,7 @@ void Slice::eval_gpu(const std::vector<array>& inputs, array& out) {
 void SliceUpdate::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 2);
   if (out.size() == 0) {
-    out.set_data(nullptr);
+    out.set_data(allocator::Buffer{nullptr});
     return;
   }
 

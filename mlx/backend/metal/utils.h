@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <mach/vm_page_size.h>
 #include "mlx/array.h"
 #include "mlx/backend/metal/device.h"
 #include "mlx/primitives.h"
@@ -12,6 +13,22 @@ namespace {
 
 using metal::CommandBuffer;
 using metal::CommandEncoder;
+
+std::shared_ptr<array::Data> stream_malloc(size_t bytes, Stream s) {
+  auto& d = metal::device(s.device);
+  auto& command_buffer = d.get_command_buffer(s.index);
+
+  // Find something available
+  auto& buffs = command_buffer.donated_buffers;
+  if (auto it = buffs.lower_bound(bytes); it != buffs.end() &&
+      it->first < std::min(2 * bytes, bytes + 2 * vm_page_size)) {
+    auto d = std::move(it->second);
+    buffs.erase(it);
+    return d;
+  } else {
+    return std::make_shared<array::Data>(allocator::malloc_or_wait(bytes));
+  }
+}
 
 template <typename T>
 inline void set_vector_bytes(

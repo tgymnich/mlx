@@ -120,12 +120,11 @@ void multi_block_sort(
   array block_partitions({n_rows, n_blocks + 1}, uint32, nullptr, {});
 
   // Do allocations
-  dev_vals_0.set_data(allocator::malloc_or_wait(dev_vals_0.nbytes()));
-  dev_vals_1.set_data(allocator::malloc_or_wait(dev_vals_1.nbytes()));
-  dev_idxs_0.set_data(allocator::malloc_or_wait(dev_idxs_0.nbytes()));
-  dev_idxs_1.set_data(allocator::malloc_or_wait(dev_idxs_1.nbytes()));
-  block_partitions.set_data(
-      allocator::malloc_or_wait(block_partitions.nbytes()));
+  dev_vals_0.set_data(stream_malloc(dev_vals_0.nbytes(), s));
+  dev_vals_1.set_data(stream_malloc(dev_vals_1.nbytes(), s));
+  dev_idxs_0.set_data(stream_malloc(dev_idxs_0.nbytes(), s));
+  dev_idxs_1.set_data(stream_malloc(dev_idxs_1.nbytes(), s));
+  block_partitions.set_data(stream_malloc(block_partitions.nbytes(), s));
 
   std::vector<array> copies = {
       dev_vals_0, dev_vals_1, dev_idxs_0, dev_idxs_1, block_partitions};
@@ -295,9 +294,9 @@ void gpu_merge_sort(
 void ArgSort::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
-
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
+
   auto& d = metal::device(s.device);
   auto& in = inputs[0];
 
@@ -307,9 +306,9 @@ void ArgSort::eval_gpu(const std::vector<array>& inputs, array& out) {
 void Sort::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
-
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
+
   auto& d = metal::device(s.device);
   auto& in = inputs[0];
 
@@ -320,9 +319,9 @@ void ArgPartition::eval_gpu(const std::vector<array>& inputs, array& out) {
   // We direct arg partition to sort for now
   assert(inputs.size() == 1);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
-
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
+
   auto& d = metal::device(s.device);
   auto& in = inputs[0];
 
@@ -333,9 +332,9 @@ void Partition::eval_gpu(const std::vector<array>& inputs, array& out) {
   // We direct partition to sort for now
   assert(inputs.size() == 1);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
-
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
+
   auto& d = metal::device(s.device);
   auto& in = inputs[0];
 

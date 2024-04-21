@@ -81,7 +81,7 @@ void all_reduce_dispatch(
     size_t intermediate_size = n_thread_groups;
     array intermediate =
         array({static_cast<int>(intermediate_size)}, out_dtype, nullptr, {});
-    intermediate.set_data(allocator::malloc_or_wait(intermediate.nbytes()));
+    intermediate.set_data(stream_malloc(intermediate.nbytes(), s));
     std::vector<array> intermediates = {intermediate};
 
     // First dispatch
@@ -226,7 +226,7 @@ void row_reduce_general_dispatch(
         out_dtype,
         nullptr,
         {});
-    intermediate.set_data(allocator::malloc_or_wait(intermediate.nbytes()));
+    intermediate.set_data(stream_malloc(intermediate.nbytes(), s));
     std::vector<array> intermediates = {intermediate};
 
     // Set the arguments for the kernel
@@ -446,7 +446,7 @@ void strided_reduce_general_dispatch(
         out_dtype,
         nullptr,
         {});
-    intermediate.set_data(allocator::malloc_or_wait(intermediate.nbytes()));
+    intermediate.set_data(stream_malloc(intermediate.nbytes(), s));
     std::vector<array> intermediates = {intermediate};
 
     // Set the arguments for the kernel
@@ -547,7 +547,8 @@ void Reduce::eval_gpu(const std::vector<array>& inputs, array& out) {
   // Minimum of 4 bytes since we use size 4 structs for all reduce
   // and metal will complain o/w
   size_t min_bytes = std::max(out.nbytes(), 4ul);
-  out.set_data(allocator::malloc_or_wait(min_bytes));
+  auto& s = stream();
+  out.set_data(stream_malloc(min_bytes, s));
   std::string op_name;
   switch (reduce_type_) {
     case Reduce::And:
@@ -570,8 +571,6 @@ void Reduce::eval_gpu(const std::vector<array>& inputs, array& out) {
       break;
   }
 
-  // Initialize output
-  auto& s = stream();
   auto& d = metal::device(s.device);
   auto& compute_encoder = d.get_command_encoder(s.index);
   {

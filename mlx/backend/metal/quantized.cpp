@@ -12,8 +12,8 @@ namespace mlx::core {
 void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 4);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
   auto& d = metal::device(s.device);
 
   auto& x_pre = inputs[0];

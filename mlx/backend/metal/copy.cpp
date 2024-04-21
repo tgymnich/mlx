@@ -23,13 +23,13 @@ void copy_gpu(const array& in, array& out, CopyType ctype, const Stream& s) {
       }
     } else {
       out.set_data(
-          allocator::malloc_or_wait(in.data_size() * out.itemsize()),
+          stream_malloc(in.data_size() * out.itemsize(), s),
           in.data_size(),
           in.strides(),
           in.flags());
     }
   } else {
-    out.set_data(allocator::malloc_or_wait(out.nbytes()));
+    out.set_data(stream_malloc(out.nbytes(), s));
   }
   if (out.size() == 0) {
     return;

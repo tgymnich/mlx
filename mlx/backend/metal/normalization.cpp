@@ -40,7 +40,7 @@ void RMSNorm::eval_gpu(
     out.move_shared_buffer(x);
   } else {
     out.set_data(
-        allocator::malloc_or_wait(x.data_size() * x.itemsize()),
+        stream_malloc(x.data_size() * x.itemsize(), stream()),
         x.data_size(),
         x.strides(),
         x.flags());
@@ -129,7 +129,7 @@ void RMSNormVJP::eval_gpu(
     gx.move_shared_buffer(g);
     g_in_gx = true;
   } else {
-    gx.set_data(allocator::malloc_or_wait(gx.nbytes()));
+    gx.set_data(stream_malloc(gx.nbytes(), stream()));
   }
 
   auto axis_size = static_cast<uint32_t>(x.shape().back());
@@ -143,7 +143,7 @@ void RMSNormVJP::eval_gpu(
     gw_temp.move_shared_buffer(g);
     g_in_gw = true;
   } else {
-    gw_temp.set_data(allocator::malloc_or_wait(gw_temp.nbytes()));
+    gw_temp.set_data(stream_malloc(gw_temp.nbytes(), stream()));
   }
   copies.push_back(gw_temp);
   {
@@ -233,7 +233,7 @@ void LayerNorm::eval_gpu(
     out.move_shared_buffer(x);
   } else {
     out.set_data(
-        allocator::malloc_or_wait(x.data_size() * x.itemsize()),
+        stream_malloc(x.data_size() * x.itemsize(), stream()),
         x.data_size(),
         x.strides(),
         x.flags());
@@ -324,7 +324,7 @@ void LayerNormVJP::eval_gpu(
     gx.move_shared_buffer(g);
     g_in_gx = true;
   } else {
-    gx.set_data(allocator::malloc_or_wait(gx.nbytes()));
+    gx.set_data(stream_malloc(gx.nbytes(), stream()));
   }
 
   auto axis_size = static_cast<uint32_t>(x.shape().back());
@@ -338,7 +338,7 @@ void LayerNormVJP::eval_gpu(
     gw_temp.move_shared_buffer(g);
     g_in_gw = true;
   } else {
-    gw_temp.set_data(allocator::malloc_or_wait(gw_temp.nbytes()));
+    gw_temp.set_data(stream_malloc(gw_temp.nbytes(), stream()));
   }
   copies.push_back(gw_temp);
   {

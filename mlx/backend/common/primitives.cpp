@@ -153,7 +153,7 @@ void Broadcast::eval(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
   const auto& in = inputs[0];
   if (out.size() == 0) {
-    out.set_data(nullptr);
+    out.set_data(allocator::Buffer{nullptr});
     return;
   }
   std::vector<size_t> strides(out.ndim(), 0);
@@ -709,7 +709,7 @@ void Slice::shared_buffer_slice(
 void Slice::eval(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
   if (out.size() == 0) {
-    out.set_data(nullptr);
+    out.set_data(allocator::Buffer{nullptr});
     return;
   }
 
@@ -752,7 +752,7 @@ std::tuple<int64_t, std::vector<int64_t>> SliceUpdate::prepare_slice(
 void SliceUpdate::eval(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 2);
   if (out.size() == 0) {
-    out.set_data(nullptr);
+    out.set_data(allocator::Buffer{nullptr});
     return;
   }
 

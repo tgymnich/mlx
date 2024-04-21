@@ -36,7 +36,7 @@ void explicit_gemm_conv_ND_gpu(
   std::vector<int> unfolded_shape{implicit_M, implicit_K};
   array in_unfolded(unfolded_shape, in.dtype(), nullptr, {});
 
-  in_unfolded.set_data(allocator::malloc_or_wait(in_unfolded.nbytes()));
+  in_unfolded.set_data(stream_malloc(in_unfolded.nbytes(), s));
 
   // Prepare unfolding kernel
   std::ostringstream kname;
@@ -592,7 +592,7 @@ void winograd_conv_2D_gpu(
   // Do filter transform
   std::vector<int> filt_wg_shape = {8 * 8, conv_params.C, conv_params.O};
   array filt_wg(filt_wg_shape, wt.dtype(), nullptr, {});
-  filt_wg.set_data(allocator::malloc_or_wait(filt_wg.nbytes()));
+  filt_wg.set_data(stream_malloc(filt_wg.nbytes(), s));
   copies_w.push_back(filt_wg);
   {
     int bc = 32;
@@ -619,7 +619,7 @@ void winograd_conv_2D_gpu(
   // Do input transform
   std::vector<int> inp_wg_shape = {8 * 8, N_tiles, conv_params.C};
   array inp_wg(inp_wg_shape, in.dtype(), nullptr, {});
-  inp_wg.set_data(allocator::malloc_or_wait(inp_wg.nbytes()));
+  inp_wg.set_data(stream_malloc(inp_wg.nbytes(), s));
   copies_w.push_back(inp_wg);
   {
     int bc = 32;
@@ -647,7 +647,7 @@ void winograd_conv_2D_gpu(
   // Do batched gemm
   std::vector<int> out_wg_shape = {8 * 8, N_tiles, conv_params.O};
   array out_wg(out_wg_shape, in.dtype(), nullptr, {});
-  out_wg.set_data(allocator::malloc_or_wait(out_wg.nbytes()));
+  out_wg.set_data(stream_malloc(out_wg.nbytes(), s));
   copies_w.push_back(out_wg);
   {
     std::vector<array> empty_copies;
@@ -762,8 +762,8 @@ void conv_2D_gpu(
 } // namespace
 
 void Convolution::eval_gpu(const std::vector<array>& inputs, array& out) {
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
   auto& d = metal::device(s.device);
 
   // Ensure contiguity

@@ -13,7 +13,7 @@ namespace mlx::core {
 void Scan::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
 
   auto& s = stream();
   auto& d = metal::device(s.device);

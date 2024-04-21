@@ -40,7 +40,7 @@ void Softmax::eval_gpu(const std::vector<array>& inputs, array& out) {
     out.move_shared_buffer(in);
   } else {
     out.set_data(
-        allocator::malloc_or_wait(in.data_size() * in.itemsize()),
+        stream_malloc(in.data_size() * in.itemsize(), stream()),
         in.data_size(),
         in.strides(),
         in.flags());

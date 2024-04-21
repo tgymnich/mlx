@@ -31,12 +31,13 @@ void Gather::eval_gpu(const std::vector<array>& inputs, array& out) {
     throw std::runtime_error(msg.str());
   }
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  auto& s = stream();
+
+  out.set_data(stream_malloc(out.nbytes(), s));
   if (out.size() == 0) {
     return;
   }
 
-  auto& s = stream();
   auto& d = metal::device(s.device);
 
   int idx_ndim = nidx ? inputs[1].ndim() : 0;

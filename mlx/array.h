@@ -356,6 +356,7 @@ class array {
   bool is_tracer() const;
 
   void set_data(allocator::Buffer buffer, deleter_t d = allocator::free);
+  void set_data(std::shared_ptr<Data> data);
 
   void set_data(
       allocator::Buffer buffer,
@@ -363,6 +364,11 @@ class array {
       std::vector<size_t> strides,
       Flags flags,
       deleter_t d = allocator::free);
+  void set_data(
+      std::shared_ptr<Data> data,
+      size_t data_size,
+      std::vector<size_t> strides,
+      Flags flags);
 
   void copy_shared_buffer(
       const array& other,

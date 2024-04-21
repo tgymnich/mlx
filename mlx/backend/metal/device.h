@@ -4,6 +4,7 @@
 
 #include <Metal/Metal.hpp>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -64,7 +65,10 @@ struct CommandBuffer {
   }
 
   void add_donatable_array(const array& a) {
-    donated_buffers.push_back(a.data_shared_ptr());
+    if (a.data_shared_ptr() != nullptr) {
+      auto a_buf = static_cast<const MTL::Buffer*>(a.buffer().ptr());
+      donated_buffers.emplace(a_buf->length(), a.data_shared_ptr());
+    }
   }
 
   void remove_arrays(const std::vector<array>& arrays) {
@@ -74,8 +78,7 @@ struct CommandBuffer {
     }
   }
 
-  // Multi-map
-  std::vector<std::shared_ptr<array::Data>> donated_buffers;
+  std::multimap<size_t, std::shared_ptr<array::Data>> donated_buffers;
   std::unordered_map<std::uintptr_t, std::shared_ptr<array::Data>> buffers;
   MTL::CommandBuffer* cbuf;
   int ops{0};

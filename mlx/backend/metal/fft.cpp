@@ -63,7 +63,7 @@ void FFT::eval_gpu(const std::vector<array>& inputs, array& out) {
       flags.contiguous = false;
 
       x_copy.set_data(
-          allocator::malloc_or_wait(x.nbytes()), x.data_size(), strides, flags);
+          stream_malloc(x.nbytes(), s), x.data_size(), strides, flags);
       copy_gpu_inplace(x, x_copy, CopyType::GeneralGeneral, s);
       copies.push_back(x_copy);
       return x_copy;
@@ -73,7 +73,7 @@ void FFT::eval_gpu(const std::vector<array>& inputs, array& out) {
 
   // TODO: allow donation here
   out.set_data(
-      allocator::malloc_or_wait(out.nbytes()),
+      stream_malloc(out.nbytes(), s),
       in_contiguous.data_size(),
       in_contiguous.strides(),
       in_contiguous.flags());

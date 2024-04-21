@@ -261,7 +261,7 @@ void steel_matmul(
     int split_k_partition_size = gemm_k_iterations * bk;
 
     array C_split({split_k_partitions, M, N}, float32, nullptr, {});
-    C_split.set_data(allocator::malloc_or_wait(C_split.nbytes()));
+    C_split.set_data(stream_malloc(C_split.nbytes(), s));
     copies.push_back(C_split);
 
     std::ostringstream kname;
@@ -438,7 +438,7 @@ void Matmul::eval_gpu(const std::vector<array>& inputs, array& out) {
     d.get_command_buffer(s.index).add_donatable_array(zero);
   }
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), s));
 
   /////////////////////////////////////////////////////////////////////////////
   // Init checks and prep
@@ -611,8 +611,8 @@ void AddMM::eval_gpu(const std::vector<array>& inputs, array& out) {
     throw std::runtime_error(
         "[matmul] Does not yet support non-floating point types.");
   }
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
   auto& s = stream();
+  out.set_data(stream_malloc(out.nbytes(), s));
   auto& d = metal::device(s.device);
 
   auto& a_pre = inputs[0];
@@ -805,7 +805,7 @@ void AddMM::eval_gpu(const std::vector<array>& inputs, array& out) {
     int split_k_partition_size = gemm_k_iterations * bk;
 
     array C_split({split_k_partitions, M, N}, float32, nullptr, {});
-    C_split.set_data(allocator::malloc_or_wait(C_split.nbytes()));
+    C_split.set_data(stream_malloc(C_split.nbytes(), s));
     copies.push_back(C_split);
 
     std::ostringstream kname;
@@ -993,7 +993,7 @@ void BlockMaskedMM::eval_gpu(const std::vector<array>& inputs, array& out) {
     return;
   }
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), s));
 
   /////////////////////////////////////////////////////////////////////////////
   // Init checks and prep

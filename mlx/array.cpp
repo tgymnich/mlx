@@ -107,8 +107,12 @@ bool array::is_tracer() const {
 }
 
 void array::set_data(allocator::Buffer buffer, deleter_t d) {
-  array_desc_->data = std::make_shared<Data>(buffer, d);
-  array_desc_->data_ptr = buffer.raw_ptr();
+  set_data(std::make_shared<Data>(buffer, d));
+}
+
+void array::set_data(std::shared_ptr<Data> data) {
+  array_desc_->data_ptr = data->buffer.raw_ptr();
+  array_desc_->data = std::move(data);
   array_desc_->data_size = size();
   array_desc_->flags.contiguous = true;
   array_desc_->flags.row_contiguous = true;
@@ -122,8 +126,16 @@ void array::set_data(
     std::vector<size_t> strides,
     Flags flags,
     deleter_t d) {
-  array_desc_->data = std::make_shared<Data>(buffer, d);
-  array_desc_->data_ptr = buffer.raw_ptr();
+  set_data(std::make_shared<Data>(buffer, d), data_size, strides, flags);
+}
+
+void array::set_data(
+    std::shared_ptr<Data> data,
+    size_t data_size,
+    std::vector<size_t> strides,
+    Flags flags) {
+  array_desc_->data_ptr = data->buffer.raw_ptr();
+  array_desc_->data = std::move(data);
   array_desc_->data_size = data_size;
   array_desc_->strides = std::move(strides);
   array_desc_->flags = flags;

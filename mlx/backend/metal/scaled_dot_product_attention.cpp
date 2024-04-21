@@ -137,7 +137,7 @@ void ScaledDotProductAttention::eval_gpu(
     return;
   }
 
-  out.set_data(allocator::malloc_or_wait(out.nbytes()));
+  out.set_data(stream_malloc(out.nbytes(), stream()));
   auto& s = stream();
   auto& d = metal::device(s.device);
 
@@ -189,14 +189,14 @@ void ScaledDotProductAttention::eval_gpu(
       float32,
       nullptr,
       {});
-  o_partials.set_data(allocator::malloc_or_wait(o_partials.nbytes()));
+  o_partials.set_data(stream_malloc(o_partials.nbytes(), s));
 
   array p_lse(
       {q.shape(-4), q.shape(-3), q.shape(-2), n_tiles}, float32, nullptr, {});
   array p_rowmaxes(
       {q.shape(-4), q.shape(-3), q.shape(-2), n_tiles}, float32, nullptr, {});
-  p_lse.set_data(allocator::malloc_or_wait(p_lse.nbytes()));
-  p_rowmaxes.set_data(allocator::malloc_or_wait(p_rowmaxes.nbytes()));
+  p_lse.set_data(stream_malloc(p_lse.nbytes(), s));
+  p_rowmaxes.set_data(stream_malloc(p_rowmaxes.nbytes(), s));
 
   temporaries.push_back(p_lse);
   temporaries.push_back(p_rowmaxes);
