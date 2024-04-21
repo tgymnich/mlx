@@ -331,6 +331,7 @@ void steel_matmul(
     }
 
     d.get_command_buffer(s.index).add_donatable_arrays(copies);
+    return;
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -436,6 +437,7 @@ void Matmul::eval_gpu(const std::vector<array>& inputs, array& out) {
     array zero = array(0, a_pre.dtype());
     copy_gpu(zero, out, CopyType::Scalar, s);
     d.get_command_buffer(s.index).add_donatable_array(zero);
+    return;
   }
 
   out.set_data(stream_malloc(out.nbytes(), s));
