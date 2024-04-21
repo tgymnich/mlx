@@ -89,10 +89,8 @@ std::function<void()> make_task(array arr, bool signal) {
       // Keep the command_buffer and event in the completion
       // handler so they are not destroyed early
       command_buffer->addCompletedHandler(
-          [s,
-           buffers = std::move(command_buffer.buffers),
-           donated_buffers = std::move(command_buffer.donated_buffers),
-           event = arr.event()](MTL::CommandBuffer* cbuf) {
+          [s, buffers = std::move(command_buffer.buffers), event = arr.event()](
+              MTL::CommandBuffer* cbuf) {
             scheduler::notify_task_completion(s);
             check_error(cbuf);
           });

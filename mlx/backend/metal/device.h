@@ -48,13 +48,9 @@ struct CommandBuffer {
 
   void add_arrays(const std::vector<array>& arrays) {
     for (auto& a : arrays) {
-      if (a.is_donatable()) {
-        add_donatable_array(a);
-      } else {
-        auto ds = a.data_shared_ptr();
-        auto id = reinterpret_cast<std::uintptr_t>(ds.get());
-        buffers.emplace(id, std::move(ds));
-      }
+      auto ds = a.data_shared_ptr();
+      auto id = reinterpret_cast<std::uintptr_t>(ds.get());
+      buffers.emplace(id, std::move(ds));
     }
   }
 
