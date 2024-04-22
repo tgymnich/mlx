@@ -819,10 +819,7 @@ void Convolution::eval_gpu(const std::vector<array>& inputs, array& out) {
         "[Convolution::eval_gpu] Only supports 1D or 2D convolutions.");
   }
 
-  // Clear copies
-  if (copies.size() > 0) {
-    d.get_command_buffer(s.index).add_donatable_arrays(copies);
-  }
+  d.get_command_buffer(s.index).add_donatable_arrays(copies);
 }
 
 } // namespace mlx::core

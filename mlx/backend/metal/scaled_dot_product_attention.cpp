@@ -116,8 +116,7 @@ void sdpa_metal(
 
     compute_encoder->dispatchThreadgroups(grid_dims_reduce, group_dims_reduce);
 
-    d.get_command_buffer(s.index)->addCompletedHandler(
-        [temporaries](MTL::CommandBuffer*) mutable { temporaries.clear(); });
+    d.get_command_buffer(s.index).add_donatable_arrays(temporaries);
     return;
   }
 }

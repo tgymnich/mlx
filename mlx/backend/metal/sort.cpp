@@ -247,8 +247,7 @@ void multi_block_sort(
   }
 
   // Clear copies
-  d.get_command_buffer(s.index)->addCompletedHandler(
-      [copies](MTL::CommandBuffer*) mutable { copies.clear(); });
+  d.get_command_buffer(s.index).add_donatable_arrays(copies);
 }
 
 template <bool ARGSORT>

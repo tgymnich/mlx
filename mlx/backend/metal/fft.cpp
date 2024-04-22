@@ -99,8 +99,7 @@ void FFT::eval_gpu(const std::vector<array>& inputs, array& out) {
     auto grid_dims = MTL::Size(batch, m, 1);
     compute_encoder->dispatchThreads(grid_dims, group_dims);
   }
-  d.get_command_buffer(s.index)->addCompletedHandler(
-      [copies](MTL::CommandBuffer*) mutable { copies.clear(); });
+  d.get_command_buffer(s.index).add_donatable_arrays(copies);
 }
 
 } // namespace mlx::core

@@ -110,10 +110,7 @@ void all_reduce_dispatch(
     grid_dims = MTL::Size(nthreads, 1, 1);
     compute_encoder->dispatchThreads(grid_dims, group_dims);
 
-    d.get_command_buffer(s.index)->addCompletedHandler(
-        [intermediates](MTL::CommandBuffer*) mutable {
-          intermediates.clear();
-        });
+    d.get_command_buffer(s.index).add_donatable_arrays(intermediates);
   }
 }
 
@@ -288,10 +285,7 @@ void row_reduce_general_dispatch(
 
     compute_encoder->dispatchThreads(grid_dims, group_dims);
 
-    d.get_command_buffer(s.index)->addCompletedHandler(
-        [intermediates](MTL::CommandBuffer*) mutable {
-          intermediates.clear();
-        });
+    d.get_command_buffer(s.index).add_donatable_arrays(intermediates);
   }
 }
 
@@ -525,10 +519,7 @@ void strided_reduce_general_dispatch(
 
     compute_encoder->dispatchThreads(grid_dims, group_dims);
 
-    d.get_command_buffer(s.index)->addCompletedHandler(
-        [intermediates](MTL::CommandBuffer*) mutable {
-          intermediates.clear();
-        });
+    d.get_command_buffer(s.index).add_donatable_arrays(intermediates);
   }
 }
 
@@ -625,10 +616,7 @@ void Reduce::eval_gpu(const std::vector<array>& inputs, array& out) {
           in, out, op_name, plan, axes_, compute_encoder, d, s);
     }
 
-    if (!copies.empty()) {
-      d.get_command_buffer(s.index)->addCompletedHandler(
-          [copies](MTL::CommandBuffer*) mutable { copies.clear(); });
-    }
+    d.get_command_buffer(s.index).add_donatable_arrays(copies);
   }
 }
 
