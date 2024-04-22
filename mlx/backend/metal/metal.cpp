@@ -80,7 +80,10 @@ std::function<void()> make_task(array arr, bool signal) {
 
     if (signal || command_buffer.ops >= MAX_OPS_PER_BUFFER) {
       d.end_encoding(s.index);
+      auto donated_buffers = std::move(command_buffer.donated_buffers);
+      decltype(donated_buffers) capture_buffers;
       if (signal) {
+        capture_buffers = std::move(donated_buffers);
         command_buffer->encodeSignalEvent(
             static_cast<MTL::Event*>(arr.event().raw_event().get()),
             arr.event().value());
@@ -89,12 +92,17 @@ std::function<void()> make_task(array arr, bool signal) {
       // Keep the command_buffer and event in the completion
       // handler so they are not destroyed early
       command_buffer->addCompletedHandler(
-          [s, buffers = std::move(command_buffer.buffers), event = arr.event()](
-              MTL::CommandBuffer* cbuf) {
+          [s,
+           buffers = std::move(command_buffer.buffers),
+           capture_buffers = std::move(capture_buffers),
+           event = arr.event()](MTL::CommandBuffer* cbuf) {
             scheduler::notify_task_completion(s);
             check_error(cbuf);
           });
       d.commit_command_buffer(s.index);
+
+      auto& new_cb = d.get_command_buffer(s.index);
+      new_cb.donated_buffers = std::move(donated_buffers);
     }
   };
   return task;
@@ -107,10 +115,11 @@ std::function<void()> make_synchronize_task(
     auto& d = metal::device(s.device);
     auto& cb = d.get_command_buffer(s.index);
     d.end_encoding(s.index);
+    cb->addCompletedHandler([p = std::move(p)](MTL::CommandBuffer* cbuf) {
+      check_error(cbuf);
+      p->set_value();
+    });
     d.commit_command_buffer(s.index);
-    cb->waitUntilCompleted();
-    check_error(cb.cbuf);
-    p->set_value();
   };
 }
 

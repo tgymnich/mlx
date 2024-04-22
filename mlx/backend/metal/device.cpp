@@ -125,12 +125,6 @@ Device::~Device() {
   for (auto& q : queue_map_) {
     q.second->release();
   }
-  for (auto& b : buffer_map_) {
-    b.second->cbuf->release();
-  }
-  for (auto& e : encoder_map_) {
-    (*e.second)->release();
-  }
   for (auto& k : kernel_map_) {
     k.second->release();
   }

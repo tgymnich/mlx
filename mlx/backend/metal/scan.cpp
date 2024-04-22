@@ -19,13 +19,12 @@ void Scan::eval_gpu(const std::vector<array>& inputs, array& out) {
   auto& d = metal::device(s.device);
 
   // Ensure contiguity
-  std::vector<array> copies;
   auto in = inputs[0];
   if (!in.flags().row_contiguous) {
     array arr_copy(in.shape(), in.dtype(), nullptr, {});
     copy_gpu(in, arr_copy, CopyType::General, s);
-    copies.push_back(arr_copy);
     in = arr_copy;
+    d.get_command_buffer(s.index).add_donatable_array(in);
   }
 
   std::ostringstream kname;
@@ -120,10 +119,6 @@ void Scan::eval_gpu(const std::vector<array>& inputs, array& out) {
     MTL::Size grid_dims = MTL::Size(grid_x * tile_x, grid_y * tile_y, 1);
     MTL::Size group_dims = MTL::Size(tile_x, tile_y, 1);
     compute_encoder->dispatchThreads(grid_dims, group_dims);
-  }
-
-  if (copies.size() > 0) {
-    d.get_command_buffer(s.index).add_donatable_arrays(copies);
   }
 }
 
