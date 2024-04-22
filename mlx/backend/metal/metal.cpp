@@ -80,15 +80,19 @@ std::function<void()> make_task(array arr, bool signal) {
 
     if (signal || command_buffer.ops >= MAX_OPS_PER_BUFFER) {
       d.end_encoding(s.index);
-      auto donated_buffers = std::move(command_buffer.donated_buffers);
+      auto donated_buffers = std::move(command_buffer.out_donated_buffers);
+      donated_buffers.insert(
+          std::make_move_iterator(command_buffer.in_donated_buffers.begin()),
+          std::make_move_iterator(command_buffer.in_donated_buffers.end()));
+
       decltype(donated_buffers) capture_buffers;
       if (signal) {
         capture_buffers = std::move(donated_buffers);
       }
+
       command_buffer->encodeSignalEvent(
           static_cast<MTL::Event*>(arr.event().raw_event().get()),
           arr.event().value());
-      //}
       scheduler::notify_new_task(s);
       d.add_listener(
           arr.event(),
@@ -106,7 +110,7 @@ std::function<void()> make_task(array arr, bool signal) {
 
       if (!signal) {
         auto& new_cb = d.get_command_buffer(s.index);
-        new_cb.donated_buffers = std::move(donated_buffers);
+        new_cb.in_donated_buffers = std::move(donated_buffers);
       }
     }
   };

@@ -19,13 +19,10 @@ std::shared_ptr<array::Data> stream_malloc(size_t bytes, Stream s) {
   auto& command_buffer = d.get_command_buffer(s.index);
 
   // Find something available
-  auto& buffs = command_buffer.donated_buffers;
+  auto& buffs = command_buffer.in_donated_buffers;
   if (auto it = buffs.lower_bound(bytes); it != buffs.end() &&
       it->first < std::min(2 * bytes, bytes + 2 * vm_page_size)) {
     auto data = std::move(it->second);
-    auto r_buf =
-        static_cast<MTL::Resource*>(const_cast<void*>(data->buffer.ptr()));
-    d.get_command_encoder(s.index).enc->memoryBarrier(&r_buf, 1);
     buffs.erase(it);
     return data;
   } else {

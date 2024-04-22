@@ -71,7 +71,7 @@ struct CommandBuffer {
   void add_donatable_array(const array& a) {
     if (a.data_shared_ptr() != nullptr) {
       auto a_buf = static_cast<const MTL::Buffer*>(a.buffer().ptr());
-      donated_buffers.emplace(a_buf->length(), a.data_shared_ptr());
+      out_donated_buffers.emplace(a_buf->length(), a.data_shared_ptr());
     }
   }
 
@@ -82,7 +82,8 @@ struct CommandBuffer {
     }
   }
 
-  std::multimap<size_t, std::shared_ptr<array::Data>> donated_buffers;
+  std::multimap<size_t, std::shared_ptr<array::Data>> in_donated_buffers;
+  std::multimap<size_t, std::shared_ptr<array::Data>> out_donated_buffers;
   std::unordered_map<std::uintptr_t, std::shared_ptr<array::Data>> buffers;
   MTL::CommandBuffer* cbuf;
   int ops{0};
