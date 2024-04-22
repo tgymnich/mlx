@@ -41,6 +41,10 @@ struct CommandBuffer {
   CommandBuffer(MTL::CommandBuffer* cbuf) : cbuf(cbuf){};
   CommandBuffer(const CommandBuffer&) = delete;
   CommandBuffer& operator=(const CommandBuffer&) = delete;
+  ~CommandBuffer() {
+    cbuf->commit();
+    cbuf->release();
+  }
 
   MTL::CommandBuffer* operator->() {
     return cbuf;
@@ -85,6 +89,11 @@ struct CommandEncoder {
       : enc(enc), concurrent(false) {};
   CommandEncoder(const CommandEncoder&) = delete;
   CommandEncoder& operator=(const CommandEncoder&) = delete;
+
+  ~CommandEncoder() {
+    enc->endEncoding();
+    enc->release();
+  }
 
   struct ConcurrentContext {
     ConcurrentContext(CommandEncoder& enc) : enc(enc) {

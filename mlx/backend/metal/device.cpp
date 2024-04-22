@@ -179,19 +179,11 @@ CommandBuffer& Device::get_command_buffer(int index) {
 }
 
 void Device::commit_command_buffer(int index) {
-  auto bit = buffer_map_.find(index);
-  bit->second->cbuf->commit();
-  bit->second->cbuf->release();
-  buffer_map_.erase(bit);
+  buffer_map_.erase(index);
 }
 
 void Device::end_encoding(int index) {
-  auto eit = encoder_map_.find(index);
-  if (eit != encoder_map_.end()) {
-    (*eit->second)->endEncoding();
-    (*eit->second)->release();
-    encoder_map_.erase(eit);
-  }
+  encoder_map_.erase(index);
 }
 
 CommandEncoder& Device::get_command_encoder(int index) {
