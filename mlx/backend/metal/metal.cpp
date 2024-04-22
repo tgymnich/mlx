@@ -105,15 +105,11 @@ std::function<void()> make_synchronize_task(
     std::shared_ptr<std::promise<void>> p) {
   return [s, p = std::move(p)]() {
     auto& d = metal::device(s.device);
-    auto cb = d.get_command_buffer(s.index);
-    if (cb == nullptr) {
-      cb = d.new_command_buffer(s.index);
-    } else {
-      d.end_encoding(s.index);
-    }
+    auto& cb = d.get_command_buffer(s.index);
+    d.end_encoding(s.index);
     d.commit_command_buffer(s.index);
     cb->waitUntilCompleted();
-    check_error(cb);
+    check_error(cb.cbuf);
     p->set_value();
   };
 }
