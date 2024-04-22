@@ -84,25 +84,30 @@ std::function<void()> make_task(array arr, bool signal) {
       decltype(donated_buffers) capture_buffers;
       if (signal) {
         capture_buffers = std::move(donated_buffers);
-        command_buffer->encodeSignalEvent(
-            static_cast<MTL::Event*>(arr.event().raw_event().get()),
-            arr.event().value());
       }
+      command_buffer->encodeSignalEvent(
+          static_cast<MTL::Event*>(arr.event().raw_event().get()),
+          arr.event().value());
+      //}
       scheduler::notify_new_task(s);
-      // Keep the command_buffer and event in the completion
-      // handler so they are not destroyed early
-      command_buffer->addCompletedHandler(
+      d.add_listener(
+          arr.event(),
           [s,
+           event = arr.event(),
            buffers = std::move(command_buffer.buffers),
-           capture_buffers = std::move(capture_buffers),
-           event = arr.event()](MTL::CommandBuffer* cbuf) {
+           capture_buffers = std::move(capture_buffers)]() mutable {
             scheduler::notify_task_completion(s);
-            check_error(cbuf);
+            buffers.clear();
+            capture_buffers.clear();
           });
+      command_buffer->addCompletedHandler(
+          [](MTL::CommandBuffer* cbuf) { check_error(cbuf); });
       d.commit_command_buffer(s.index);
 
-      auto& new_cb = d.get_command_buffer(s.index);
-      new_cb.donated_buffers = std::move(donated_buffers);
+      if (!signal) {
+        auto& new_cb = d.get_command_buffer(s.index);
+        new_cb.donated_buffers = std::move(donated_buffers);
+      }
     }
   };
   return task;

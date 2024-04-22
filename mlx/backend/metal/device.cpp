@@ -118,6 +118,7 @@ Device::Device() {
   auto pool = new_scoped_memory_pool();
   device_ = load_device();
   library_map_ = {{"mlx", load_library(device_)}};
+  listener_ = MTL::SharedEventListener::alloc()->init();
 }
 
 Device::~Device() {
@@ -131,6 +132,7 @@ Device::~Device() {
   for (auto& l : library_map_) {
     l.second->release();
   }
+  listener_->release();
   device_->release();
 }
 
@@ -509,6 +511,14 @@ MTL::ComputePipelineState* Device::get_kernel(
   MTL::Library* mtl_lib = get_library_cache_(lib_name);
 
   return get_kernel(base_name, mtl_lib, kname, func_consts, linked_functions);
+}
+
+void Device::add_listener(Event& e, const std::function<void()>& fn) {
+  __block std::function<void()> fn_ = fn;
+  auto se = static_cast<MTL::SharedEvent*>(e.raw_event().get());
+  se->notifyListener(listener_, e.value(), ^(MTL::SharedEvent*, uint64_t) {
+    fn_();
+  });
 }
 
 Device& device(mlx::core::Device) {
