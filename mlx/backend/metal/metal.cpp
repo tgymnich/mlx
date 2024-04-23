@@ -72,8 +72,8 @@ std::function<void()> make_task(array arr, bool signal) {
       debug_set_primitive_buffer_label(command_buffer, arr.primitive());
       arr.primitive().eval_gpu(arr.inputs(), outputs);
     }
-    command_buffer.add_arrays(arr.inputs());
-    command_buffer.add_arrays(arr.siblings());
+    command_buffer.add_input_arrays(arr.inputs());
+    command_buffer.add_output_arrays(arr.siblings());
     if (!arr.is_tracer()) {
       arr.detach();
     }
@@ -94,18 +94,15 @@ std::function<void()> make_task(array arr, bool signal) {
           static_cast<MTL::Event*>(arr.event().raw_event().get()),
           arr.event().value());
       scheduler::notify_new_task(s);
-      d.add_listener(
-          arr.event(),
+      command_buffer->addCompletedHandler(
           [s,
            event = arr.event(),
            buffers = std::move(command_buffer.buffers),
-           capture_buffers = std::move(capture_buffers)]() mutable {
+           capture_buffers =
+               std::move(capture_buffers)](MTL::CommandBuffer* cbuf) {
             scheduler::notify_task_completion(s);
-            buffers.clear();
-            capture_buffers.clear();
+            check_error(cbuf);
           });
-      command_buffer->addCompletedHandler(
-          [](MTL::CommandBuffer* cbuf) { check_error(cbuf); });
       d.commit_command_buffer(s.index);
 
       if (!signal) {

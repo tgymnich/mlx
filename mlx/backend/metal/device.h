@@ -50,15 +50,27 @@ struct CommandBuffer {
     return cbuf;
   }
 
-  void add_arrays(const std::vector<array>& arrays) {
+  void add_output_arrays(const std::vector<array>& arrays) {
+    for (auto& a : arrays) {
+      add_array(a);
+    }
+  }
+
+  void add_input_arrays(const std::vector<array>& arrays) {
     for (auto& a : arrays) {
       if (a.is_donatable()) {
         add_donatable_array(a);
       } else {
-        auto ds = a.data_shared_ptr();
-        auto id = reinterpret_cast<std::uintptr_t>(ds.get());
-        buffers.emplace(id, std::move(ds));
+        add_array(a);
       }
+    }
+  }
+
+  void add_array(const array& a) {
+    if (a.data_shared_ptr() != nullptr) {
+      auto ds = a.data_shared_ptr();
+      auto id = reinterpret_cast<std::uintptr_t>(ds.get());
+      buffers.emplace(id, std::move(ds));
     }
   }
 
@@ -225,8 +237,6 @@ class Device {
   MTL::ArgumentEncoder* argument_encoder(
       const std::vector<MTL::ArgumentDescriptor*>& arg_descs) const;
 
-  void add_listener(Event& e, const std::function<void()>& fn);
-
  private:
   MTL::Library* get_library_cache_(const std::string& name);
 
@@ -254,7 +264,6 @@ class Device {
       const MTL::LinkedFunctions* linked_functions);
 
   MTL::Device* device_;
-  MTL::SharedEventListener* listener_;
   std::unordered_map<int32_t, MTL::CommandQueue*> queue_map_;
   std::unordered_map<int32_t, std::unique_ptr<CommandBuffer>> buffer_map_;
   std::unordered_map<int32_t, std::unique_ptr<CommandEncoder>> encoder_map_;
