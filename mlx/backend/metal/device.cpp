@@ -131,6 +131,9 @@ Device::~Device() {
   for (auto& l : library_map_) {
     l.second->release();
   }
+  for (auto& f : fence_map_) {
+    f.second->release();
+  }
   device_->release();
 }
 
@@ -146,7 +149,8 @@ void Device::new_queue(int index) {
     throw std::runtime_error(
         "[metal::Device] Failed to make new command queue.");
   }
-  queue_map_.insert({index, q});
+  queue_map_.emplace(index, q);
+  fence_map_.emplace(index, device_->newFence());
 }
 
 CommandBuffer& Device::get_command_buffer(int index) {
@@ -184,14 +188,11 @@ CommandEncoder& Device::get_command_encoder(int index) {
   auto eit = encoder_map_.find(index);
   if (eit == encoder_map_.end()) {
     auto& cb = get_command_buffer(index);
-    auto compute_encoder =
-        cb->computeCommandEncoder(MTL::DispatchTypeConcurrent);
-
+    auto enc = cb->computeCommandEncoder(MTL::DispatchTypeConcurrent);
+    auto fence = fence_map_.find(index)->second;
+    auto ce = std::make_unique<CommandEncoder>(enc, fence);
     // Increment ref count so the buffer is not garbage collected
-    compute_encoder->retain();
-    eit = encoder_map_
-              .emplace(index, std::make_unique<CommandEncoder>(compute_encoder))
-              .first;
+    eit = encoder_map_.emplace(index, std::move(ce)).first;
   }
   return *(eit->second);
 }

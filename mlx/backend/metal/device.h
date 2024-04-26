@@ -102,12 +102,16 @@ struct CommandBuffer {
 };
 
 struct CommandEncoder {
-  CommandEncoder(MTL::ComputeCommandEncoder* enc)
-      : enc(enc), concurrent(false) {};
+  CommandEncoder(MTL::ComputeCommandEncoder* enc, MTL::Fence* fence)
+      : enc(enc), fence(fence), concurrent(false) {
+    enc->waitForFence(fence);
+    enc->retain();
+  };
   CommandEncoder(const CommandEncoder&) = delete;
   CommandEncoder& operator=(const CommandEncoder&) = delete;
 
   ~CommandEncoder() {
+    enc->updateFence(fence);
     enc->endEncoding();
     enc->release();
   }
@@ -134,6 +138,7 @@ struct CommandEncoder {
   void set_input_array(const array& a, int idx, int offset = 0) {
     auto r_buf =
         static_cast<MTL::Resource*>(const_cast<void*>(a.buffer().ptr()));
+
     if (auto it = outputs.find(r_buf); it != outputs.end()) {
       // Insert a barrier
       enc->memoryBarrier(&r_buf, 1);
@@ -141,6 +146,7 @@ struct CommandEncoder {
       // Remove the output
       outputs.erase(it);
     }
+
     auto a_buf = static_cast<const MTL::Buffer*>(a.buffer().ptr());
     auto base_offset = a.data<char>() -
         static_cast<char*>(const_cast<MTL::Buffer*>(a_buf)->contents());
@@ -166,6 +172,7 @@ struct CommandEncoder {
   MTL::ComputeCommandEncoder* enc;
 
  private:
+  MTL::Fence* fence;
   bool concurrent;
   std::unordered_set<MTL::Resource*> outputs;
   std::unordered_set<MTL::Resource*> concurrent_outputs;
@@ -265,6 +272,7 @@ class Device {
 
   MTL::Device* device_;
   std::unordered_map<int32_t, MTL::CommandQueue*> queue_map_;
+  std::unordered_map<int32_t, MTL::Fence*> fence_map_;
   std::unordered_map<int32_t, std::unique_ptr<CommandBuffer>> buffer_map_;
   std::unordered_map<int32_t, std::unique_ptr<CommandEncoder>> encoder_map_;
   std::unordered_map<std::string, MTL::ComputePipelineState*> kernel_map_;
