@@ -13,17 +13,30 @@ namespace mlx::core::distributed {
 void AllReduce::eval_cpu(
     const std::vector<array>& inputs,
     std::vector<array>& outputs) {
-  assert(inputs.size() == 1);
-  assert(outputs.size() == 1);
+  for (int i = 0; i < inputs.size(); i++) {
+    if (inputs[i].is_donatable(outputs.size())) {
+      outputs[i].copy_shared_buffer(inputs[i]);
+    } else {
+      outputs[i].set_data(allocator::malloc_or_wait(outputs[i].nbytes()));
+    }
+  }
 
-  outputs[0].set_data(allocator::malloc_or_wait(outputs[0].nbytes()));
-
-  switch (reduce_type_) {
-    case Sum:
-      distributed::detail::all_reduce_sum(group(), inputs[0], outputs[0]);
-      break;
-    default:
-      throw std::runtime_error("Only all reduce sum is supported for now");
+  if (inputs.size() == 1) {
+    switch (reduce_type_) {
+      case Sum:
+        distributed::detail::all_reduce_sum(group(), inputs[0], outputs[0]);
+        break;
+      default:
+        throw std::runtime_error("Only all reduce sum is supported for now");
+    }
+  } else {
+    switch (reduce_type_) {
+      case Sum:
+        distributed::detail::all_reduce_sum(group(), inputs, outputs);
+        break;
+      default:
+        throw std::runtime_error("Only all reduce sum is supported for now");
+    }
   }
 }
 

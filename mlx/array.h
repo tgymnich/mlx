@@ -252,8 +252,9 @@ class array {
   }
 
   /** True indicates the arrays buffer is safe to reuse */
-  bool is_donatable() const {
-    return array_desc_.use_count() == 1 && (array_desc_->data.use_count() == 1);
+  bool is_donatable(int known_instances = 1) const {
+    return array_desc_.use_count() == known_instances &&
+        (array_desc_->data.use_count() == 1);
   }
 
   /** The array's siblings. */

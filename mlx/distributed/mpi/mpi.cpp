@@ -46,7 +46,9 @@ struct MPIWrapper {
     LOAD_SYMBOL(MPI_Comm_split, comm_split);
     LOAD_SYMBOL(MPI_Comm_free, comm_free);
     LOAD_SYMBOL(MPI_Allreduce, all_reduce);
+    LOAD_SYMBOL(MPI_Iallreduce, async_all_reduce);
     LOAD_SYMBOL(MPI_Allgather, all_gather);
+    LOAD_SYMBOL(MPI_Waitall, waitall);
 
     // Objects
     LOAD_SYMBOL(ompi_mpi_comm_world, comm_world_);
@@ -130,6 +132,14 @@ struct MPIWrapper {
   int (*finalize)();
   int (*rank)(MPI_Comm, int*);
   int (*size)(MPI_Comm, int*);
+  int (*async_all_reduce)(
+      const void*,
+      void*,
+      int,
+      MPI_Datatype,
+      MPI_Op,
+      MPI_Comm,
+      MPI_Request*);
   int (*all_reduce)(const void*, void*, int, MPI_Datatype, MPI_Op, MPI_Comm);
   int (*all_gather)(
       const void*,
@@ -139,6 +149,7 @@ struct MPIWrapper {
       int,
       MPI_Datatype,
       MPI_Comm);
+  int (*waitall)(int, MPI_Request*, MPI_Status*);
   int (*comm_split)(MPI_Comm, int, int, MPI_Comm*);
   int (*comm_free)(MPI_Comm*);
 
@@ -258,12 +269,34 @@ Stream communication_stream() {
 void all_reduce_sum(Group group, const array& input_, array& output) {
   array input = ensure_row_contiguous(input_);
   mpi().all_reduce(
-      input.data<void>(),
+      (input.data<void>() != output.data<void>()) ? input.data<void>()
+                                                  : MPI_IN_PLACE,
       output.data<void>(),
       input.size(),
       mpi().datatype(input),
       mpi().op_sum(),
       to_comm(group));
+}
+
+void all_reduce_sum(
+    Group group,
+    const std::vector<array>& inputs,
+    std::vector<array>& outputs) {
+  std::vector<MPI_Request> requests(inputs.size());
+  std::vector<MPI_Status> statuses(inputs.size());
+  for (int i = 0; i < inputs.size(); i++) {
+    array input = ensure_row_contiguous(inputs[i]);
+    mpi().async_all_reduce(
+        (input.data<void>() != outputs[i].data<void>()) ? input.data<void>()
+                                                        : MPI_IN_PLACE,
+        outputs[i].data<void>(),
+        input.size(),
+        mpi().datatype(input),
+        mpi().op_sum(),
+        to_comm(group),
+        &requests[i]);
+  }
+  mpi().waitall(requests.size(), &requests[0], &statuses[0]);
 }
 
 void all_gather(Group group, const array& input_, array& output) {

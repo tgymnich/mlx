@@ -53,6 +53,10 @@ Stream communication_stream();
 
 /* Perform an all reduce sum operation */
 void all_reduce_sum(Group group, const array& input, array& output);
+void all_reduce_sum(
+    Group group,
+    const std::vector<array>& inputs,
+    std::vector<array>& outputs);
 
 /* Perform an all reduce sum operation */
 void all_gather(Group group, const array& input, array& output);
