@@ -9,6 +9,8 @@
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
 
+#include <iostream>
+
 namespace mlx::core {
 
 void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
@@ -42,18 +44,27 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
   int D = x.shape(-1);
   int B = x.size() / D;
   int O = out.shape(-1);
+  auto mode_string = mode_ == QuantizationMode::DEFAULT
+      ? "QuantizationMode::DEFAULT"
+      : "QuantizationMode::NF4";
+  // auto mode_string = "default";
   if (transpose_) {
     // Route to the fast qmv kernel that has no bounds checking
     if (B < 6 && O % 8 == 0 && D % 512 == 0 && D >= 512) {
       std::ostringstream kname;
       auto type_string = get_type_string(x.dtype());
       kname << "qmv_" << type_string << "_gs_" << group_size_ << "_b_" << bits_
-            << "_fast";
+            << "_" << mode_string << "_fast";
 
       // Encode and dispatch kernel
       auto& compute_encoder = d.get_command_encoder(s.index);
       auto template_def = get_template_definition(
-          kname.str(), "qmv_fast", type_string, group_size_, bits_);
+          kname.str(),
+          "qmv_fast",
+          type_string,
+          group_size_,
+          bits_,
+          mode_string);
       auto kernel = get_quantized_kernel(d, kname.str(), template_def);
       compute_encoder->setComputePipelineState(kernel);
 
@@ -77,12 +88,13 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
     else if (B < 6) {
       std::ostringstream kname;
       auto type_string = get_type_string(x.dtype());
-      kname << "qmv_" << type_string << "_gs_" << group_size_ << "_b_" << bits_;
+      kname << "qmv_" << type_string << "_gs_" << group_size_ << "_b_" << bits_
+            << "_" << mode_string;
 
       // Encode and dispatch kernel
       auto& compute_encoder = d.get_command_encoder(s.index);
       auto template_def = get_template_definition(
-          kname.str(), "qmv", type_string, group_size_, bits_);
+          kname.str(), "qmv", type_string, group_size_, bits_, mode_string);
       auto kernel = get_quantized_kernel(d, kname.str(), template_def);
       compute_encoder->setComputePipelineState(kernel);
 
@@ -108,12 +120,18 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
       std::string aligned_n = (O % 32) == 0 ? "true" : "false";
       auto type_string = get_type_string(x.dtype());
       kname << "qmm_t_" << type_string << "_gs_" << group_size_ << "_b_"
-            << bits_ << "_alN_" << aligned_n;
+            << bits_ << "_alN_" << aligned_n << "_" << mode_string;
 
       // Encode and dispatch kernel
       auto& compute_encoder = d.get_command_encoder(s.index);
       auto template_def = get_template_definition(
-          kname.str(), "qmm_t", type_string, group_size_, bits_, aligned_n);
+          kname.str(),
+          "qmm_t",
+          type_string,
+          group_size_,
+          bits_,
+          aligned_n,
+          mode_string);
       auto kernel = get_quantized_kernel(d, kname.str(), template_def);
       compute_encoder->setComputePipelineState(kernel);
 
@@ -141,12 +159,13 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
     if (B < 4) {
       std::ostringstream kname;
       auto type_string = get_type_string(x.dtype());
-      kname << "qvm_" << type_string << "_gs_" << group_size_ << "_b_" << bits_;
+      kname << "qvm_" << type_string << "_gs_" << group_size_ << "_b_" << bits_
+            << "_" << mode_string;
 
       // Encode and dispatch kernel
       auto& compute_encoder = d.get_command_encoder(s.index);
       auto template_def = get_template_definition(
-          kname.str(), "qvm", type_string, group_size_, bits_);
+          kname.str(), "qvm", type_string, group_size_, bits_, mode_string);
       auto kernel = get_quantized_kernel(d, kname.str(), template_def);
       compute_encoder->setComputePipelineState(kernel);
 
@@ -171,12 +190,12 @@ void QuantizedMatmul::eval_gpu(const std::vector<array>& inputs, array& out) {
       std::ostringstream kname;
       auto type_string = get_type_string(x.dtype());
       kname << "qmm_n_" << type_string << "_gs_" << group_size_ << "_b_"
-            << bits_;
+            << bits_ << "_" << mode_string;
 
       // Encode and dispatch kernel
       auto& compute_encoder = d.get_command_encoder(s.index);
       auto template_def = get_template_definition(
-          kname.str(), "qmm_n", type_string, group_size_, bits_);
+          kname.str(), "qmm_n", type_string, group_size_, bits_, mode_string);
       auto kernel = get_quantized_kernel(d, kname.str(), template_def);
       compute_encoder->setComputePipelineState(kernel);
 

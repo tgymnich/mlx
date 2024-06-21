@@ -6,28 +6,33 @@
 #include "mlx/backend/metal/kernels/quantized.h"
 
 
-#define instantiate_qmv_fast(itype, group_size, bits)       \
-  instantiate_kernel(                                       \
-      "qmv_" #itype "_gs_" #group_size "_b_" #bits "_fast", \
-      qmv_fast,                                             \
-      itype,                                                \
-      group_size,                                           \
-      bits)
+#define instantiate_qmv_fast(itype, group_size, bits, mode)               \
+  instantiate_kernel(                                                     \
+      "qmv_" #itype "_gs_" #group_size "_b_" #bits "_" #mode "_fast",     \
+      qmv_fast,                                                           \
+      itype,                                                              \
+      group_size,                                                         \
+      bits,                                                               \
+      mode)
 
-#define instantiate_qmv_fast_types(group_size, bits)     \
-  instantiate_qmv_fast(float, group_size, bits) \
-  instantiate_qmv_fast(float16_t, group_size, bits)  \
-  instantiate_qmv_fast(bfloat16_t, group_size, bits)
+#define instantiate_qmv_fast_types(group_size, bits, mode)       \
+  instantiate_qmv_fast(float, group_size, bits, mode)      \
+  instantiate_qmv_fast(float16_t, group_size, bits, mode)  \
+  instantiate_qmv_fast(bfloat16_t, group_size, bits, mode)
 
-instantiate_qmv_fast_types(128, 2)
-instantiate_qmv_fast_types(128, 4)
-instantiate_qmv_fast_types(128, 8)
-instantiate_qmv_fast_types( 64, 2)
-instantiate_qmv_fast_types( 64, 4)
-instantiate_qmv_fast_types( 64, 8)
-instantiate_qmv_fast_types( 32, 2)
-instantiate_qmv_fast_types( 32, 4)
-instantiate_qmv_fast_types( 32, 8)
+instantiate_qmv_fast_types(128, 2, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types(128, 4, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types(128, 8, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 64, 2, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 64, 4, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 64, 8, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 32, 2, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 32, 4, QuantizationMode::DEFAULT)
+instantiate_qmv_fast_types( 32, 8, QuantizationMode::DEFAULT)
+
+instantiate_qmv_fast_types(128, 4, QuantizationMode::NF4)
+instantiate_qmv_fast_types(64, 4, QuantizationMode::NF4)
+instantiate_qmv_fast_types(32, 4, QuantizationMode::NF4)
 
 #define instantiate_qmv(itype, group_size, bits)    \
   instantiate_kernel(                               \
@@ -37,8 +42,8 @@ instantiate_qmv_fast_types( 32, 8)
       group_size,                                   \
       bits)
 
-#define instantiate_qmv_types(group_size, bits)     \
-  instantiate_qmv(float, group_size, bits) \
+#define instantiate_qmv_types(group_size, bits) \
+  instantiate_qmv(float, group_size, bits)      \
   instantiate_qmv(float16_t, group_size, bits)  \
   instantiate_qmv(bfloat16_t, group_size, bits)
 
@@ -60,8 +65,8 @@ instantiate_qmv_types( 32, 8)
       group_size,                                   \
       bits)
 
-#define instantiate_qvm_types(group_size, bits)     \
-  instantiate_qvm(float, group_size, bits) \
+#define instantiate_qvm_types(group_size, bits) \
+  instantiate_qvm(float, group_size, bits)      \
   instantiate_qvm(float16_t, group_size, bits)  \
   instantiate_qvm(bfloat16_t, group_size, bits)
 
@@ -84,12 +89,12 @@ instantiate_qvm_types( 32, 8)
       bits,                                                              \
       aligned_N)
 
-#define instantiate_qmm_t_types(group_size, bits)                  \
-  instantiate_qmm_t(float, group_size, bits, false)       \
-  instantiate_qmm_t(float16_t, group_size, bits, false)        \
+#define instantiate_qmm_t_types(group_size, bits)        \
+  instantiate_qmm_t(float, group_size, bits, false)      \
+  instantiate_qmm_t(float16_t, group_size, bits, false)  \
   instantiate_qmm_t(bfloat16_t, group_size, bits, false) \
-  instantiate_qmm_t(float, group_size, bits, true)        \
-  instantiate_qmm_t(float16_t, group_size, bits, true)         \
+  instantiate_qmm_t(float, group_size, bits, true)       \
+  instantiate_qmm_t(float16_t, group_size, bits, true)   \
   instantiate_qmm_t(bfloat16_t, group_size, bits, true)
 
 instantiate_qmm_t_types(128, 2)

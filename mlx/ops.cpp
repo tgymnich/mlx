@@ -12,6 +12,8 @@
 #include "mlx/transforms.h"
 #include "mlx/utils.h"
 
+#include <iostream>
+
 namespace mlx::core {
 
 namespace {
@@ -72,7 +74,8 @@ std::pair<int, int> extract_quantized_matmul_dims(
     const array& biases,
     bool transpose,
     int group_size,
-    int bits) {
+    int bits,
+    QuantizationMode mode) {
   if (w.dtype() != uint32) {
     std::ostringstream msg;
     msg << "[" << tag << "] The weight matrix should be uint32 "
@@ -80,7 +83,7 @@ std::pair<int, int> extract_quantized_matmul_dims(
     throw std::invalid_argument(msg.str());
   }
 
-  if (scales.shape() != biases.shape()) {
+  if (mode == QuantizationMode::DEFAULT && scales.shape() != biases.shape()) {
     std::ostringstream msg;
     msg << "[" << tag << "] Scales and biases should have the same shape. "
         << "Received scales with shape " << scales.shape()
@@ -3287,10 +3290,19 @@ array quantized_matmul(
     bool transpose /* = true */,
     int group_size /* = 64 */,
     int bits /* = 4 */,
+    QuantizationMode mode /* = DEFAULT */,
     StreamOrDevice s /* = {} */) {
   // Check and extract the quantized matrix shape against x
   auto [w_inner_dims, w_outer_dims] = extract_quantized_matmul_dims(
-      "quantized_matmul", x, w, scales, biases, transpose, group_size, bits);
+      "quantized_matmul",
+      x,
+      w,
+      scales,
+      biases,
+      transpose,
+      group_size,
+      bits,
+      mode);
 
   if (w.ndim() != 2) {
     std::ostringstream msg;
@@ -3315,7 +3327,7 @@ array quantized_matmul(
       std::move(out_shape),
       dtype,
       std::make_shared<QuantizedMatmul>(
-          to_stream(s), group_size, bits, transpose),
+          to_stream(s), group_size, bits, transpose, mode),
       {astype(x, dtype, s),
        w,
        astype(scales, dtype, s),
@@ -3326,6 +3338,7 @@ std::tuple<array, array, array> quantize(
     const array& w,
     int group_size /* = 64 */,
     int bits /* = 4 */,
+    QuantizationMode mode /* = DEFAULT */,
     StreamOrDevice s /* = {} */) {
   if (group_size != 32 && group_size != 64 && group_size != 128) {
     std::ostringstream msg;
@@ -3338,6 +3351,13 @@ std::tuple<array, array, array> quantize(
     std::ostringstream msg;
     msg << "[quantize] The requested number of bits " << bits
         << " is not supported. The supported bits are 2, 4 and 8.";
+    throw std::invalid_argument(msg.str());
+  }
+
+  if (mode == QuantizationMode::NF4 && bits != 4) {
+    std::ostringstream msg;
+    msg << "[quantize] The requested number of bits " << bits
+        << " is not supported. NF4 only supports 4 bits";
     throw std::invalid_argument(msg.str());
   }
 
@@ -3382,34 +3402,62 @@ std::tuple<array, array, array> quantize(
   auto wshape = w.shape();
   wshape.back() = -1;
 
-  // Compute scales and biases
-  array packed_w = reshape(w, {-1, w.shape(-1) / group_size, group_size}, s);
-  array w_max = max(packed_w, /* axis= */ -1, /* keepdims= */ true, s);
-  array w_min = min(packed_w, /* axis= */ -1, /* keepdims= */ true, s);
+  auto packed_w = reshape(w, {-1, w.shape(-1) / group_size, group_size}, s);
+  auto biases = array({0.0});
+  auto scales = array({0.0});
+  if (mode == QuantizationMode::NF4) {
+    // For NF4, we quantize using a fixed array of quantiles generated for the
+    // normal distribution
+    auto quantiles = array(
+        {-1.0,
+         -0.6961928009986877,
+         -0.5250730514526367,
+         -0.39491748809814453,
+         -0.28444138169288635,
+         -0.18477343022823334,
+         -0.09105003625154495,
+         0.0,
+         0.07958029955625534,
+         0.16093020141124725,
+         0.24611230194568634,
+         0.33791524171829224,
+         0.44070982933044434,
+         0.5626170039176941,
+         0.7229568362236023,
+         1.0});
+    scales = max(abs(packed_w, s), /* axis= */ -1, /* keepdims= */ true, s);
+    array scaled_w = expand_dims(divide(packed_w, scales, s), -1, s);
+    packed_w =
+        argmin(square(subtract(scaled_w, quantiles, s), s), -1, false, s);
+    // TODO figure out zero scale case
+  } else {
+    array w_max = max(packed_w, /* axis= */ -1, /* keepdims= */ true, s);
+    array w_min = min(packed_w, /* axis= */ -1, /* keepdims= */ true, s);
 
-  array mask = greater(abs(w_min, s), abs(w_max, s), s);
-  array scales = maximum(divide(subtract(w_max, w_min, s), n_bins, s), eps, s);
-  scales = where(mask, scales, negative(scales), s);
-  array edge = where(mask, w_min, w_max, s);
-  array q0 = round(divide(edge, scales, s), s);
-  scales = where(not_equal(q0, zero, s), divide(edge, q0, s), scales);
-  array biases = where(equal(q0, zero, s), zero, edge);
+    array mask = greater(abs(w_min, s), abs(w_max, s), s);
+    scales = maximum(divide(subtract(w_max, w_min, s), n_bins, s), eps, s);
+    scales = where(mask, scales, negative(scales), s);
+    array edge = where(mask, w_min, w_max, s);
+    array q0 = round(divide(edge, scales, s), s);
+    scales = where(not_equal(q0, zero, s), divide(edge, q0, s), scales);
+    biases = where(equal(q0, zero, s), zero, edge);
 
-  // Quantize and pack w
-  packed_w = astype(
-      clip(
-          round(divide(subtract(packed_w, biases, s), scales, s), s),
-          zero,
-          n_bins),
-      uint32);
+    packed_w = astype(
+        clip(
+            round(divide(subtract(packed_w, biases, s), scales, s), s),
+            zero,
+            n_bins),
+        uint32);
+    biases = reshape(biases, wshape, s);
+  }
+
+  // Pack bits into uint32s
   packed_w = reshape(packed_w, {packed_w.shape(0), -1, el_per_int}, s);
   packed_w = sum(
       multiply(packed_w, shifts, s), /* axis= */ 2, /* keepdims= */ false, s);
 
   return std::make_tuple(
-      reshape(packed_w, wshape, s),
-      reshape(scales, wshape, s),
-      reshape(biases, wshape, s));
+      reshape(packed_w, wshape, s), reshape(scales, wshape, s), biases);
 }
 
 array dequantize(
@@ -3418,6 +3466,7 @@ array dequantize(
     const array& biases,
     int group_size /* = 64 */,
     int bits /* = 4 */,
+    QuantizationMode mode /* = DEFAULT */,
     StreamOrDevice s /* = {} */) {
   if (bits <= 0) {
     std::ostringstream msg;
@@ -3429,7 +3478,8 @@ array dequantize(
     msg << "[dequantize] Invalid value for group_size: " << group_size;
     throw std::invalid_argument(msg.str());
   }
-  if (w.ndim() < 2 || scales.ndim() < 2 || biases.ndim() < 2) {
+  if (w.ndim() < 2 || scales.ndim() < 2 ||
+      (biases.ndim() < 2 && mode == QuantizationMode::DEFAULT)) {
     std::ostringstream msg;
     msg << "[quantize] The matrix to be quantized must have at least 2 dimension "
         << "but it has only " << w.ndim() << ".";
@@ -3443,7 +3493,8 @@ array dequantize(
   sshape.back() = -1;
   bshape.back() = -1;
 
-  if (wshape != sshape || wshape != bshape) {
+  if (wshape != sshape ||
+      (wshape != bshape && mode == QuantizationMode::DEFAULT)) {
     throw std::invalid_argument(
         "[dequantize] Shape of scales and biases does not match the matrix");
   }
@@ -3484,10 +3535,31 @@ array dequantize(
   // Dequantize
   wshape.push_back(group_size);
   w_full = reshape(w_full, wshape, s);
-  w_full = multiply(w_full, expand_dims(scales, -1, s), s);
-  w_full = add(w_full, expand_dims(biases, -1, s), s);
+  if (mode == QuantizationMode::NF4) {
+    auto quantiles = array(
+        {-1.0,
+         -0.6961928009986877,
+         -0.5250730514526367,
+         -0.39491748809814453,
+         -0.28444138169288635,
+         -0.18477343022823334,
+         -0.09105003625154495,
+         0.0,
+         0.07958029955625534,
+         0.16093020141124725,
+         0.24611230194568634,
+         0.33791524171829224,
+         0.44070982933044434,
+         0.5626170039176941,
+         0.7229568362236023,
+         1.0});
+    w_full = take(quantiles, w_full, 0, s);
+    w_full = multiply(w_full, expand_dims(scales, -1, s), s);
+  } else {
+    w_full = multiply(w_full, expand_dims(scales, -1, s), s);
+    w_full = add(w_full, expand_dims(biases, -1, s), s);
+  }
   w_full = reshape(w_full, sshape, s);
-
   return w_full;
 }
 
@@ -3501,14 +3573,15 @@ array gather_qmm(
     bool transpose /* = true */,
     int group_size /* = 64 */,
     int bits /* = 4 */,
+    QuantizationMode mode /* = DEFAULT */,
     StreamOrDevice s /* = {} */) {
   if (!lhs_indices_ && !rhs_indices_) {
     return quantized_matmul(
-        x, w, scales, biases, transpose, group_size, bits, s);
+        x, w, scales, biases, transpose, group_size, bits, mode, s);
   }
 
   auto [w_inner_dims, w_outer_dims] = extract_quantized_matmul_dims(
-      "gather_qmm", x, w, scales, biases, transpose, group_size, bits);
+      "gather_qmm", x, w, scales, biases, transpose, group_size, bits, mode);
 
   // Extract indices and broadcast them
   array lhs_indices = indices_or_default(lhs_indices_, x, s);
@@ -3529,7 +3602,8 @@ array gather_qmm(
   auto out = array(
       std::move(out_shape),
       out_type,
-      std::make_shared<GatherQMM>(to_stream(s), group_size, bits, transpose),
+      std::make_shared<GatherQMM>(
+          to_stream(s), group_size, bits, transpose, mode),
       {astype(x, out_type, s),
        w,
        astype(scales, out_type, s),

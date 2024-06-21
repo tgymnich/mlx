@@ -62,10 +62,17 @@ def matmul(x, y):
 
 def _quant_matmul(x, w, s, b, transpose, group_size, bits):
     ys = []
-    for i in range(10):
+    for i in range(100):
         ys.append(
             mx.quantized_matmul(
-                x, w, s, b, transpose=transpose, group_size=group_size, bits=bits
+                x,
+                w,
+                s,
+                b,
+                transpose=transpose,
+                group_size=group_size,
+                bits=bits,
+                mode=mx.QuantizationMode.DEFAULT,
             )
         )
     mx.eval(ys)

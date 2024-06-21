@@ -1445,11 +1445,13 @@ class QuantizedMatmul : public UnaryPrimitive {
       Stream stream,
       int group_size,
       int bits,
-      bool transpose)
+      bool transpose,
+      QuantizationMode mode)
       : UnaryPrimitive(stream),
         group_size_(group_size),
         bits_(bits),
-        transpose_(transpose) {}
+        transpose_(transpose),
+        mode_(mode) {}
 
   void eval_cpu(const std::vector<array>& inputs, array& out) override;
   void eval_gpu(const std::vector<array>& inputs, array& out) override;
@@ -1463,17 +1465,24 @@ class QuantizedMatmul : public UnaryPrimitive {
   int group_size_;
   int bits_;
   bool transpose_;
+  QuantizationMode mode_;
 
   void eval(const std::vector<array>& inputs, array& out);
 };
 
 class GatherQMM : public UnaryPrimitive {
  public:
-  explicit GatherQMM(Stream stream, int group_size, int bits, bool transpose)
+  explicit GatherQMM(
+      Stream stream,
+      int group_size,
+      int bits,
+      bool transpose,
+      QuantizationMode mode)
       : UnaryPrimitive(stream),
         group_size_(group_size),
         bits_(bits),
-        transpose_(transpose) {}
+        transpose_(transpose),
+        mode_(mode) {}
 
   void eval_cpu(const std::vector<array>& inputs, array& out) override;
   void eval_gpu(const std::vector<array>& inputs, array& out) override;
@@ -1487,6 +1496,7 @@ class GatherQMM : public UnaryPrimitive {
   int group_size_;
   int bits_;
   bool transpose_;
+  QuantizationMode mode_;
 
   void eval(const std::vector<array>& inputs, array& out);
 };

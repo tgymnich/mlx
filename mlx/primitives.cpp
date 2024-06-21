@@ -2359,6 +2359,7 @@ std::vector<array> QuantizedMatmul::vjp(
           !transpose_,
           group_size_,
           bits_,
+          mode_,
           stream()));
     }
 
@@ -2424,6 +2425,7 @@ std::vector<array> GatherQMM::vjp(
                       !transpose_,
                       group_size_,
                       bits_,
+                      mode_,
                       stream()),
                   -3,
                   stream()),

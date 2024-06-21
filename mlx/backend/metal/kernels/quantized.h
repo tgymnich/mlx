@@ -7,7 +7,27 @@ using namespace metal;
 
 #define MLX_MTL_CONST static constant constexpr const
 
+enum QuantizationMode { DEFAULT, NF4 };
+
 MLX_MTL_CONST int SIMD_SIZE = 32;
+
+constexpr constant static float nf4_values[16] = {
+    -1.0,
+    -0.6961928009986877,
+    -0.5250730514526367,
+    -0.39491748809814453,
+    -0.28444138169288635,
+    -0.18477343022823334,
+    -0.09105003625154495,
+    0.0,
+    0.07958029955625534,
+    0.16093020141124725,
+    0.24611230194568634,
+    0.33791524171829224,
+    0.44070982933044434,
+    0.5626170039176941,
+    0.7229568362236023,
+    1.0};
 
 template <typename T, typename U, int values_per_thread, int bits>
 inline U load_vector(const device T* x, thread U* x_thread) {
@@ -21,9 +41,9 @@ inline U load_vector(const device T* x, thread U* x_thread) {
     for (int i = 0; i < values_per_thread; i += 4) {
       sum += x[i] + x[i + 1] + x[i + 2] + x[i + 3];
       x_thread[i] = x[i];
-      x_thread[i + 1] = x[i + 1] / 4.0f;
-      x_thread[i + 2] = x[i + 2] / 16.0f;
-      x_thread[i + 3] = x[i + 3] / 64.0f;
+      x_thread[i + 1] = x[i + 1];
+      x_thread[i + 2] = x[i + 2];
+      x_thread[i + 3] = x[i + 3];
     }
   }
 
@@ -31,9 +51,9 @@ inline U load_vector(const device T* x, thread U* x_thread) {
     for (int i = 0; i < values_per_thread; i += 4) {
       sum += x[i] + x[i + 1] + x[i + 2] + x[i + 3];
       x_thread[i] = x[i];
-      x_thread[i + 1] = x[i + 1] / 16.0f;
-      x_thread[i + 2] = x[i + 2] / 256.0f;
-      x_thread[i + 3] = x[i + 3] / 4096.0f;
+      x_thread[i + 1] = x[i + 1];
+      x_thread[i + 2] = x[i + 2];
+      x_thread[i + 3] = x[i + 3];
     }
   }
 
@@ -59,9 +79,9 @@ inline U load_vector_safe(const device T* x, thread U* x_thread, int N) {
     for (int i = 0; i < N; i += 4) {
       sum += x[i] + x[i + 1] + x[i + 2] + x[i + 3];
       x_thread[i] = x[i];
-      x_thread[i + 1] = x[i + 1] / 4.0f;
-      x_thread[i + 2] = x[i + 2] / 16.0f;
-      x_thread[i + 3] = x[i + 3] / 64.0f;
+      x_thread[i + 1] = x[i + 1];
+      x_thread[i + 2] = x[i + 2];
+      x_thread[i + 3] = x[i + 3];
     }
     for (int i = N; i < values_per_thread; i++) {
       x_thread[i] = 0;
@@ -72,9 +92,9 @@ inline U load_vector_safe(const device T* x, thread U* x_thread, int N) {
     for (int i = 0; i < N; i += 4) {
       sum += x[i] + x[i + 1] + x[i + 2] + x[i + 3];
       x_thread[i] = x[i];
-      x_thread[i + 1] = x[i + 1] / 16.0f;
-      x_thread[i + 2] = x[i + 2] / 256.0f;
-      x_thread[i + 3] = x[i + 3] / 4096.0f;
+      x_thread[i + 1] = x[i + 1];
+      x_thread[i + 2] = x[i + 2];
+      x_thread[i + 3] = x[i + 3];
     }
     for (int i = N; i < values_per_thread; i++) {
       x_thread[i] = 0;
@@ -95,25 +115,21 @@ inline U load_vector_safe(const device T* x, thread U* x_thread, int N) {
 }
 
 template <typename U, int values_per_thread, int bits>
-inline U qdot(
+METAL_FUNC U qdot_affine(
     const device uint8_t* w,
     const thread U* x_thread,
     U scale,
     U bias,
     U sum) {
-  static_assert(
-      bits == 2 || bits == 4 || bits == 8,
-      "Template undefined for bits not in {2, 4, 8}");
-
   U accum = 0;
 
   if (bits == 2) {
     for (int i = 0; i < (values_per_thread / 4); i++) {
       accum +=
           (x_thread[4 * i] * (w[i] & 0x03) +
-           x_thread[4 * i + 1] * (w[i] & 0x0c) +
-           x_thread[4 * i + 2] * (w[i] & 0x30) +
-           x_thread[4 * i + 3] * (w[i] & 0xc0));
+           x_thread[4 * i + 1] * ((w[i] & 0x0c) >> 2) +
+           x_thread[4 * i + 2] * ((w[i] & 0x30) >> 4) +
+           x_thread[4 * i + 3] * ((w[i] & 0xc0) >> 6));
     }
   }
 
@@ -122,9 +138,9 @@ inline U qdot(
     for (int i = 0; i < (values_per_thread / 4); i++) {
       accum +=
           (x_thread[4 * i] * (ws[i] & 0x000f) +
-           x_thread[4 * i + 1] * (ws[i] & 0x00f0) +
-           x_thread[4 * i + 2] * (ws[i] & 0x0f00) +
-           x_thread[4 * i + 3] * (ws[i] & 0xf000));
+           x_thread[4 * i + 1] / 16.0f * (ws[i] & 0x00f0) +
+           x_thread[4 * i + 2] / 256.0f * (ws[i] & 0x0f00) +
+           x_thread[4 * i + 3] / 4096.0f * (ws[i] & 0xf000));
     }
   }
 
@@ -134,10 +150,98 @@ inline U qdot(
     }
   }
 
-  return scale * accum + sum * bias;
+  U out = scale * accum + sum * bias;
+  return out;
 }
 
 template <typename U, int values_per_thread, int bits>
+inline U qdot_nf4(const device uint8_t* w, const thread U* x_thread, U scale) {
+  U accum = 0;
+  for (int i = 0; i < (values_per_thread / 2); i++) {
+    accum +=
+        (x_thread[2 * i] * nf4_values[w[i] & 0x000f] +
+         x_thread[2 * i + 1] * nf4_values[(w[i] & 0x00f0) >> 4]);
+  }
+  U out = scale * accum;
+  return out;
+}
+
+template <typename U, int values_per_thread, int bits, QuantizationMode mode>
+inline U qdot(
+    const device uint8_t* w,
+    const thread U* x_thread,
+    U scale,
+    U bias,
+    U sum) {
+  static_assert(
+      bits == 2 || bits == 4 || bits == 8,
+      "Template undefined for bits not in {2, 4, 8}");
+  if (mode == QuantizationMode::DEFAULT) {
+    return qdot_affine<U, values_per_thread, bits>(
+        w, x_thread, scale, bias, sum);
+  } else {
+    return qdot_nf4<U, values_per_thread, bits>(w, x_thread, scale);
+  }
+}
+
+template <typename U, int values_per_thread, int bits>
+inline U qdot_safe_affine(
+    const device uint8_t* w,
+    const thread U* x_thread,
+    U scale,
+    U bias,
+    U sum,
+    int N) {
+  U accum = 0;
+
+  if (bits == 2) {
+    for (int i = 0; i < (N / 4); i++) {
+      accum +=
+          (x_thread[4 * i] * (w[i] & 0x03) +
+           x_thread[4 * i + 1] * ((w[i] & 0x0c) >> 2) +
+           x_thread[4 * i + 2] * ((w[i] & 0x30) >> 4) +
+           x_thread[4 * i + 3] * ((w[i] & 0xc0) >> 6));
+    }
+  }
+
+  else if (bits == 4) {
+    const device uint16_t* ws = (const device uint16_t*)w;
+    for (int i = 0; i < (N / 4); i++) {
+      accum +=
+          (x_thread[4 * i] * (ws[i] & 0x000f) +
+           x_thread[4 * i + 1] / 16.0f * (ws[i] & 0x00f0) +
+           x_thread[4 * i + 2] / 256.0f * (ws[i] & 0x0f00) +
+           x_thread[4 * i + 3] / 4096.0f * (ws[i] & 0xf000));
+    }
+  }
+
+  else if (bits == 8) {
+    for (int i = 0; i < N; i++) {
+      accum += x_thread[i] * w[i];
+    }
+  }
+
+  U out = scale * accum + sum * bias;
+  return out;
+}
+
+template <typename U, int values_per_thread, int bits>
+inline U qdot_safe_nf4(
+    const device uint8_t* w,
+    const thread U* x_thread,
+    U scale,
+    int N) {
+  U accum = 0;
+  for (int i = 0; i < (N / 2); i++) {
+    accum +=
+        (x_thread[2 * i] * nf4_values[w[i] & 0x000f] +
+         x_thread[2 * i + 1] * nf4_values[(w[i] & 0x00f0) >> 4]);
+  }
+  U out = scale * accum;
+  return out;
+}
+
+template <typename U, int values_per_thread, int bits, QuantizationMode mode>
 inline U qdot_safe(
     const device uint8_t* w,
     const thread U* x_thread,
@@ -148,46 +252,17 @@ inline U qdot_safe(
   static_assert(
       bits == 2 || bits == 4 || bits == 8,
       "Template undefined for bits not in {2, 4, 8}");
-
-  U accum = 0;
-
-  if (bits == 2) {
-    for (int i = 0; i < (N / 4); i++) {
-      accum +=
-          (x_thread[4 * i] * (w[i] & 0x03) +
-           x_thread[4 * i + 1] * (w[i] & 0x0c) +
-           x_thread[4 * i + 2] * (w[i] & 0x30) +
-           x_thread[4 * i + 3] * (w[i] & 0xc0));
-    }
+  if (mode == QuantizationMode::DEFAULT) {
+    return qdot_safe_affine<U, values_per_thread, bits>(
+        w, x_thread, scale, bias, sum, N);
+  } else {
+    return qdot_safe_nf4<U, values_per_thread, bits>(w, x_thread, scale, N);
   }
-
-  else if (bits == 4) {
-    const device uint16_t* ws = (const device uint16_t*)w;
-    for (int i = 0; i < (N / 4); i++) {
-      accum +=
-          (x_thread[4 * i] * (ws[i] & 0x000f) +
-           x_thread[4 * i + 1] * (ws[i] & 0x00f0) +
-           x_thread[4 * i + 2] * (ws[i] & 0x0f00) +
-           x_thread[4 * i + 3] * (ws[i] & 0xf000));
-    }
-  }
-
-  else if (bits == 8) {
-    for (int i = 0; i < N; i++) {
-      accum += x_thread[i] * w[i];
-    }
-  }
-
-  return scale * accum + sum * bias;
 }
 
 template <typename U, int values_per_thread, int bits>
 inline void
-qouter(const thread uint8_t* w, U x, U scale, U bias, thread U* result) {
-  static_assert(
-      bits == 2 || bits == 4 || bits == 8,
-      "Template undefined for bits not in {2, 4, 8}");
-
+qouter_affine(const thread uint8_t* w, U x, U scale, U bias, thread U* result) {
   if (bits == 2) {
     U s[4] = {scale, scale / 4.0f, scale / 16.0f, scale / 64.0f};
     for (int i = 0; i < (values_per_thread / 4); i++) {
@@ -213,13 +288,34 @@ qouter(const thread uint8_t* w, U x, U scale, U bias, thread U* result) {
   }
 }
 
-template <typename U, int N, int bits>
+template <typename U, int values_per_thread, int bits>
 inline void
-dequantize(const device uint8_t* w, U scale, U bias, threadgroup U* w_local) {
+qouter_nf4(const thread uint8_t* w, U x, U scale, thread U* result) {
+  for (int i = 0; i < (values_per_thread / 2); i++) {
+    result[2 * i] += x * (scale * nf4_values[w[i] & 0x0f]);
+    result[2 * i + 1] += x * (scale * nf4_values[(w[i] & 0xf0) >> 4]);
+  }
+}
+
+template <typename U, int values_per_thread, int bits, QuantizationMode mode>
+inline void
+qouter(const thread uint8_t* w, U x, U scale, U bias, thread U* result) {
   static_assert(
       bits == 2 || bits == 4 || bits == 8,
       "Template undefined for bits not in {2, 4, 8}");
+  if (mode == QuantizationMode::DEFAULT) {
+    return qouter_affine<U, values_per_thread, bits>(w, x, scale, bias, result);
+  } else {
+    return qouter_nf4<U, values_per_thread, bits>(w, x, scale, result);
+  }
+}
 
+template <typename U, int N, int bits>
+inline void dequantize_affine(
+    const device uint8_t* w,
+    U scale,
+    U bias,
+    threadgroup U* w_local) {
   if (bits == 2) {
     U s[4] = {
         scale,
@@ -249,6 +345,28 @@ dequantize(const device uint8_t* w, U scale, U bias, threadgroup U* w_local) {
   }
 }
 
+template <typename U, int N, int bits>
+inline void
+dequantize_nf4(const device uint8_t* w, U scale, threadgroup U* w_local) {
+  for (int i = 0; i < (N / 2); i++) {
+    w_local[2 * i] = scale * static_cast<U>(nf4_values[w[i] & 0x0f]);
+    w_local[2 * i + 1] = scale * static_cast<U>(nf4_values[(w[i] & 0xf0) >> 4]);
+  }
+}
+
+template <typename U, int N, int bits, QuantizationMode mode>
+inline void
+dequantize(const device uint8_t* w, U scale, U bias, threadgroup U* w_local) {
+  static_assert(
+      bits == 2 || bits == 4 || bits == 8,
+      "Template undefined for bits not in {2, 4, 8}");
+  if (mode == QuantizationMode::DEFAULT) {
+    return dequantize_affine<U, N, bits>(w, scale, bias, w_local);
+  } else {
+    return dequantize_nf4<U, N, bits>(w, scale, w_local);
+  }
+}
+
 template <
     typename T,
     short BROWS,
@@ -257,7 +375,8 @@ template <
     short reduction_dim,
     short tgp_size,
     short group_size,
-    short bits>
+    short bits,
+    QuantizationMode mode>
 struct QuantizedBlockLoader {
   static_assert(
       BCOLS <= group_size,
@@ -318,7 +437,7 @@ struct QuantizedBlockLoader {
     T scale = *scales;
     T bias = *biases;
     for (int i = 0; i < n_reads; i++) {
-      dequantize<T, pack_factor, bits>(
+      dequantize<T, pack_factor, bits, mode>(
           (device uint8_t*)(src + i), scale, bias, dst + i * pack_factor);
     }
   }
@@ -345,7 +464,7 @@ struct QuantizedBlockLoader {
     T scale = *scales;
     T bias = *biases;
     for (int i = 0; i < n_reads; i++) {
-      dequantize<T, pack_factor, bits>(
+      dequantize<T, pack_factor, bits, mode>(
           (device uint8_t*)(src + i), scale, bias, dst + i * pack_factor);
     }
   }
@@ -371,7 +490,11 @@ struct QuantizedBlockLoader {
   }
 };
 
-template <typename T, int group_size, int bits>
+template <
+    typename T,
+    int group_size,
+    int bits,
+    QuantizationMode mode = QuantizationMode::DEFAULT>
 METAL_FUNC void qmv_fast_impl(
     const device uint32_t* w,
     const device T* scales,
@@ -417,13 +540,14 @@ METAL_FUNC void qmv_fast_impl(
       const device T* bl = biases + row * in_vec_size_g;
 
       U s = sl[0];
-      U b = bl[0];
-      result[row] += qdot<U, values_per_thread, bits>(wl, x_thread, s, b, sum);
+      U b = mode == QuantizationMode::DEFAULT ? bl[0] : 0;
+      result[row] +=
+          qdot<U, values_per_thread, bits, mode>(wl, x_thread, s, b, sum);
     }
 
     w += block_size / pack_factor;
-    scales += block_size / group_size;
     biases += block_size / group_size;
+    scales += block_size / group_size;
     x += block_size;
   }
 
@@ -435,7 +559,11 @@ METAL_FUNC void qmv_fast_impl(
   }
 }
 
-template <typename T, int group_size, int bits>
+template <
+    typename T,
+    int group_size,
+    int bits,
+    QuantizationMode mode = QuantizationMode::DEFAULT>
 METAL_FUNC void qmv_impl(
     const device uint32_t* w,
     const device T* scales,
@@ -493,7 +621,7 @@ METAL_FUNC void qmv_impl(
         U s = sl[0];
         U b = bl[0];
         result[row] +=
-            qdot<U, values_per_thread, bits>(wl, x_thread, s, b, sum);
+            qdot<U, values_per_thread, bits, mode>(wl, x_thread, s, b, sum);
       }
 
       w += block_size / pack_factor;
@@ -516,7 +644,8 @@ METAL_FUNC void qmv_impl(
 
       U s = sl[0];
       U b = bl[0];
-      result[row] += qdot<U, values_per_thread, bits>(wl, x_thread, s, b, sum);
+      result[row] +=
+          qdot<U, values_per_thread, bits, mode>(wl, x_thread, s, b, sum);
     }
 
     for (int row = 0; out_row + row < out_vec_size; row++) {
@@ -548,7 +677,7 @@ METAL_FUNC void qmv_impl(
         U s = sl[0];
         U b = bl[0];
         result[row] +=
-            qdot<U, values_per_thread, bits>(wl, x_thread, s, b, sum);
+            qdot<U, values_per_thread, bits, mode>(wl, x_thread, s, b, sum);
       }
 
       w += block_size / pack_factor;
@@ -571,7 +700,7 @@ METAL_FUNC void qmv_impl(
 
       U s = sl[0];
       U b = bl[0];
-      result[row] += qdot_safe<U, values_per_thread, bits>(
+      result[row] += qdot_safe<U, values_per_thread, bits, mode>(
           wl, x_thread, s, b, sum, remaining);
     }
 
@@ -584,7 +713,11 @@ METAL_FUNC void qmv_impl(
   }
 }
 
-template <typename T, const int group_size, const int bits>
+template <
+    typename T,
+    const int group_size,
+    const int bits,
+    const QuantizationMode mode = QuantizationMode::DEFAULT>
 METAL_FUNC void qvm_impl(
     const device T* x,
     const device uint32_t* w,
@@ -636,7 +769,7 @@ METAL_FUNC void qvm_impl(
       bias = *biases;
       w_local = *((device vec_w*)w);
 
-      qouter<U, tn * pack_factor, bits>(
+      qouter<U, tn * pack_factor, bits, mode>(
           (thread uint8_t*)&w_local, x_local, scale, bias, result);
 
       x += blocksize;
@@ -651,7 +784,7 @@ METAL_FUNC void qvm_impl(
       bias = *biases;
       w_local = *((device vec_w*)w);
 
-      qouter<U, tn * pack_factor, bits>(
+      qouter<U, tn * pack_factor, bits, mode>(
           (thread uint8_t*)&w_local, x_local, scale, bias, result);
 
       x += blocksize;
@@ -669,7 +802,7 @@ METAL_FUNC void qvm_impl(
       scale = 0;
       bias = 0;
     }
-    qouter<U, tn * pack_factor, bits>(
+    qouter<U, tn * pack_factor, bits, mode>(
         (thread uint8_t*)&w_local, x_local, scale, bias, result);
   }
 
@@ -695,7 +828,8 @@ template <
     const int BN,
     const int group_size,
     const int bits,
-    const bool aligned_N>
+    const bool aligned_N,
+    const QuantizationMode mode = QuantizationMode::DEFAULT>
 METAL_FUNC void qmm_t_impl(
     const device T* x,
     const device uint32_t* w,
@@ -734,7 +868,8 @@ METAL_FUNC void qmm_t_impl(
       1,
       WM * WN * SIMD_SIZE,
       group_size,
-      bits>;
+      bits,
+      mode>;
 
   // Set the block
   const int K_w = K / pack_factor;
@@ -816,7 +951,8 @@ template <
     const int BK,
     const int BN,
     const int group_size,
-    const int bits>
+    const int bits,
+    const QuantizationMode mode = QuantizationMode::DEFAULT>
 METAL_FUNC void qmm_n_impl(
     const device T* x,
     const device uint32_t* w,
@@ -856,7 +992,8 @@ METAL_FUNC void qmm_n_impl(
       0,
       WM * WN * SIMD_SIZE,
       group_size,
-      bits>;
+      bits,
+      mode>;
 
   // Set the block
   const int y_row = tid.y * BM;
@@ -996,7 +1133,11 @@ METAL_FUNC void adjust_matrix_offsets(
   y += tid.z * output_stride;
 }
 
-template <typename T, int group_size, int bits>
+template <
+    typename T,
+    int group_size,
+    int bits,
+    QuantizationMode mode = QuantizationMode::DEFAULT>
 [[kernel]] void qmv_fast(
     const device uint32_t* w [[buffer(0)]],
     const device T* scales [[buffer(1)]],
@@ -1008,7 +1149,7 @@ template <typename T, int group_size, int bits>
     uint3 tid [[threadgroup_position_in_grid]],
     uint simd_gid [[simdgroup_index_in_threadgroup]],
     uint simd_lid [[thread_index_in_simdgroup]]) {
-  qmv_fast_impl<T, group_size, bits>(
+  qmv_fast_impl<T, group_size, bits, mode>(
       w,
       scales,
       biases,
@@ -1021,7 +1162,11 @@ template <typename T, int group_size, int bits>
       simd_lid);
 }
 
-template <typename T, const int group_size, const int bits>
+template <
+    typename T,
+    const int group_size,
+    const int bits,
+    const QuantizationMode mode = QuantizationMode::DEFAULT>
 [[kernel]] void qmv(
     const device uint32_t* w [[buffer(0)]],
     const device T* scales [[buffer(1)]],
@@ -1033,7 +1178,7 @@ template <typename T, const int group_size, const int bits>
     uint3 tid [[threadgroup_position_in_grid]],
     uint simd_gid [[simdgroup_index_in_threadgroup]],
     uint simd_lid [[thread_index_in_simdgroup]]) {
-  qmv_impl<T, group_size, bits>(
+  qmv_impl<T, group_size, bits, mode>(
       w,
       scales,
       biases,
@@ -1046,7 +1191,11 @@ template <typename T, const int group_size, const int bits>
       simd_lid);
 }
 
-template <typename T, const int group_size, const int bits>
+template <
+    typename T,
+    const int group_size,
+    const int bits,
+    const QuantizationMode mode = QuantizationMode::DEFAULT>
 [[kernel]] void qvm(
     const device T* x [[buffer(0)]],
     const device uint32_t* w [[buffer(1)]],
@@ -1058,7 +1207,7 @@ template <typename T, const int group_size, const int bits>
     uint3 tid [[threadgroup_position_in_grid]],
     uint simd_gid [[simdgroup_index_in_threadgroup]],
     uint simd_lid [[thread_index_in_simdgroup]]) {
-  qvm_impl<T, group_size, bits>(
+  qvm_impl<T, group_size, bits, mode>(
       x,
       w,
       scales,
@@ -1076,6 +1225,7 @@ template <
     const int group_size,
     const int bits,
     const bool aligned_N,
+    const QuantizationMode mode = QuantizationMode::DEFAULT,
     const int BM = 32,
     const int BK = 32,
     const int BN = 32>
@@ -1099,7 +1249,7 @@ template <
   threadgroup T Xs[BM * BK_padded];
   threadgroup T Ws[BN * BK_padded];
 
-  qmm_t_impl<T, BM, BK, BN, group_size, bits, aligned_N>(
+  qmm_t_impl<T, BM, BK, BN, group_size, bits, aligned_N, mode>(
       x, w, scales, biases, y, Xs, Ws, M, N, K, tid, lid, simd_gid, simd_lid);
 }
 
@@ -1107,6 +1257,7 @@ template <
     typename T,
     const int group_size,
     const int bits,
+    const QuantizationMode mode = QuantizationMode::DEFAULT,
     const int BM = 32,
     const int BK = 32,
     const int BN = 32>
@@ -1131,7 +1282,7 @@ template <
   threadgroup T Xs[BM * BK_padded];
   threadgroup T Ws[BK * BN_padded];
 
-  qmm_n_impl<T, BM, BK, BN, group_size, bits>(
+  qmm_n_impl<T, BM, BK, BN, group_size, bits, mode>(
       x, w, scales, biases, y, Xs, Ws, M, N, K, tid, lid, simd_gid, simd_lid);
 }
 

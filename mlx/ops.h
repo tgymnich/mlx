@@ -1236,6 +1236,7 @@ array quantized_matmul(
     bool transpose = true,
     int group_size = 64,
     int bits = 4,
+    QuantizationMode mode = QuantizationMode::DEFAULT,
     StreamOrDevice s = {});
 
 /** Quantize a matrix along its last axis */
@@ -1243,6 +1244,7 @@ std::tuple<array, array, array> quantize(
     const array& w,
     int group_size = 64,
     int bits = 4,
+    QuantizationMode mode = QuantizationMode::DEFAULT,
     StreamOrDevice s = {});
 
 /** Dequantize a matrix produced by quantize() */
@@ -1252,6 +1254,7 @@ array dequantize(
     const array& biases,
     int group_size = 64,
     int bits = 4,
+    QuantizationMode mode = QuantizationMode::DEFAULT,
     StreamOrDevice s = {});
 
 /** Compute matrix products with matrix-level gather. */
@@ -1265,6 +1268,7 @@ array gather_qmm(
     bool transpose = true,
     int group_size = 64,
     int bits = 4,
+    QuantizationMode mode = QuantizationMode::DEFAULT,
     StreamOrDevice s = {});
 
 /** Returns a contraction of a and b over multiple dimensions. */

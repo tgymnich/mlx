@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "mlx/allocator.h"
@@ -564,5 +565,7 @@ inline constexpr bool is_arrays_v = (is_array_v<T> && ...);
 
 template <typename... T>
 using enable_for_arrays_t = typename std::enable_if_t<is_arrays_v<T...>>;
+
+enum QuantizationMode { DEFAULT, NF4 };
 
 } // namespace mlx::core

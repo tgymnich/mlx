@@ -3616,6 +3616,10 @@ void init_ops(nb::module_& m) {
           array: An array of the same type as ``a`` rounded to the
           given number of decimals.
       )pbdoc");
+  nb::enum_<QuantizationMode>(m, "QuantizationMode")
+      .value("DEFAULT", QuantizationMode::DEFAULT)
+      .value("NF4", QuantizationMode::NF4)
+      .export_values();
   m.def(
       "quantized_matmul",
       &quantized_matmul,
@@ -3626,10 +3630,11 @@ void init_ops(nb::module_& m) {
       "transpose"_a = true,
       "group_size"_a = 64,
       "bits"_a = 4,
+      "mode"_a = QuantizationMode::DEFAULT,
       nb::kw_only(),
       "stream"_a = nb::none(),
       nb::sig(
-          "def quantized_matmul(x: array, w: array, /, scales: array, biases: array, transpose: bool = True, group_size: int = 64, bits: int = 4, *, stream: Union[None, Stream, Device] = None) -> array"),
+          "def quantized_matmul(x: array, w: quantized_array, transpose: bool = True, group_size: int = 64, bits: int = 4, mode: QuantizationMode = QuantizationMode.DEFAULT, *, stream: Union[None, Stream, Device] = None) -> array"),
       R"pbdoc(
         Perform the matrix multiplication with the quantized matrix ``w``. The
         quantization uses one floating point scale and bias per ``group_size`` of
@@ -3648,6 +3653,7 @@ void init_ops(nb::module_& m) {
             shares a scale and bias. (default: ``64``)
           bits (int, optional): The number of bits occupied by each element in
             ``w``. (default: ``4``)
+          mode (QuantizationMode, optional): The mode of quantization: see QuantizationMode (default: ``QuantizationMode.DEFAULT``)
 
         Returns:
           array: The result of the multiplication of ``x`` with ``w``.
@@ -3658,10 +3664,11 @@ void init_ops(nb::module_& m) {
       nb::arg(),
       "group_size"_a = 64,
       "bits"_a = 4,
+      "mode"_a = QuantizationMode::DEFAULT,
       nb::kw_only(),
       "stream"_a = nb::none(),
       nb::sig(
-          "def quantize(w: array, /, group_size: int = 64, bits : int = 4, *, stream: Union[None, Stream, Device] = None) -> Tuple[array, array, array]"),
+          "def quantize(w: array, /, group_size: int = 64, bits : int = 4, mode: QuantizationMode = QuantizationMode.DEFAULT, *, stream: Union[None, Stream, Device] = None) -> quantized_array"),
       R"pbdoc(
         Quantize the matrix ``w`` using ``bits`` bits per element.
 
@@ -3703,6 +3710,8 @@ void init_ops(nb::module_& m) {
             scale and bias. (default: ``64``)
           bits (int, optional): The number of bits occupied by each element of
             ``w`` in the returned quantized matrix. (default: ``4``)
+          mode (QuantizationMode, optional): The number of bits occupied by each element of
+            ``w`` in the returned quantized matrix. (default: ``QuantizationMode.DEFAULT``)
 
         Returns:
           tuple: A tuple containing
@@ -3719,6 +3728,7 @@ void init_ops(nb::module_& m) {
       "biases"_a,
       "group_size"_a = 64,
       "bits"_a = 4,
+      "mode"_a = QuantizationMode::DEFAULT,
       nb::kw_only(),
       "stream"_a = nb::none(),
       nb::sig(
@@ -3743,12 +3753,14 @@ void init_ops(nb::module_& m) {
             scale and bias. (default: ``64``)
           bits (int, optional): The number of bits occupied by each element in
             ``w``. (default: ``4``)
+          mode (QuantizationMode, optional): The number of bits occupied by each element of
+            ``w`` in the returned quantized matrix. (default: ``QuantizationMode.DEFAULT``)
 
         Returns:
           array: The dequantized version of ``w``
       )pbdoc");
   m.def(
-      "gater_qmm",
+      "gather_qmm",
       &gather_qmm,
       nb::arg(),
       nb::arg(),
@@ -3759,6 +3771,7 @@ void init_ops(nb::module_& m) {
       "transpose"_a = true,
       "group_size"_a = 64,
       "bits"_a = 4,
+      "mode"_a = QuantizationMode::DEFAULT,
       nb::kw_only(),
       "stream"_a = nb::none(),
       nb::sig(
@@ -3788,6 +3801,8 @@ void init_ops(nb::module_& m) {
             shares a scale and bias. (default: ``64``)
           bits (int, optional): The number of bits occupied by each element in
             ``w``. (default: ``4``)
+          mode (QuantizationMode, optional): The number of bits occupied by each element of
+            ``w`` in the returned quantized matrix. (default: ``QuantizationMode.DEFAULT``)
 
         Returns:
           array: The result of the multiplication of ``x`` with ``w``

@@ -164,12 +164,14 @@ class QuantizedLinear(Module):
         bias: bool = True,
         group_size: int = 64,
         bits: int = 4,
+        mode: mx.QuantizationMode = mx.QuantizationMode.NF4,
     ):
         super().__init__()
 
         # Quantization config
         self.group_size = group_size
         self.bits = bits
+        self.mode = mode
 
         # Initialize the quantized weight
         scale = math.sqrt(1 / input_dims)
@@ -210,18 +212,26 @@ class QuantizedLinear(Module):
             transpose=True,
             group_size=self.group_size,
             bits=self.bits,
+            mode=self.mode,
         )
         if "bias" in self:
             x = x + self["bias"]
         return x
 
+    # if we pass mode to both then we can propagate it to the thing
     @classmethod
-    def from_linear(cls, linear_layer: Module, group_size: int = 64, bits: int = 4):
+    def from_linear(
+        cls,
+        linear_layer: Module,
+        group_size: int = 64,
+        bits: int = 4,
+        mode: mx.QuantizationMode = mx.QuantizationMode.NF4,
+    ):
         """Create a :obj:`QuantizedLinear` layer from a :obj:`Linear` layer."""
         output_dims, input_dims = linear_layer.weight.shape
-        ql = cls(input_dims, output_dims, False, group_size, bits)
+        ql = cls(input_dims, output_dims, False, group_size, bits, mode)
         ql.weight, ql.scales, ql.biases = mx.quantize(
-            linear_layer.weight, group_size, bits
+            linear_layer.weight, group_size=group_size, bits=bits, mode=mode
         )
         if "bias" in linear_layer:
             ql.bias = linear_layer.bias
